@@ -1,0 +1,4 @@
+CATALOG_HOST=catalog-service
+CATALOG_PORT=5002
+ORDER_HOST=order-service
+ORDER_PORT=5007

@@ -1,0 +1,7 @@
+.git/
+.DS_Store
+__pycache__
+*.db
+.idea/
+cs677-lab2/
+out.txt

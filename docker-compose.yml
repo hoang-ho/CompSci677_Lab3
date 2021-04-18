@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  catalog-service:
+    container_name: catalog-service
+    build: ./CatalogService
+    ports:
+      - "5002:5002"
+    # To mount a local file to container 
+    # volumes:
+    # - type: bind
+    #   source: ./CatalogService/logfile.json
+    #   target: /CatalogService/logfile.json
+  
+  order-service:
+    container_name: order-service
+    build: 
+      context: ./OrderService
+      dockerfile: deployments/Dockerfile
+    ports:
+      - "5007:5007"
+    env_file: config_env
+
+  front-end-service:
+    container_name: front-end-service
+    build: 
+      context: ./FrontendService
+      dockerfile: deployments/Dockerfile
+    ports:
+      - "5004:5004"
+    env_file: config_env

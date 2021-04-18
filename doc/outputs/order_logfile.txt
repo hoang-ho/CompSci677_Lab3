@@ -1,0 +1,7 @@
+Sample Output of Order Logfile by calling the GET order-service:5004/log endpoint
+
+"[
+    {\"id\": 1, \"request_id\": 1, \"timestamp\": \"2021-04-05 21:02:01.657937\"}, 
+    {\"id\": 2, \"request_id\": 2, \"timestamp\": \"2021-04-05 21:12:34.761446\"}, 
+    {\"id\": 3, \"request_id\": 2, \"timestamp\": \"2021-04-05 21:12:34.769293\"}
+]"

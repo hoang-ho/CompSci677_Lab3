@@ -1,0 +1,2 @@
+INFO:root:Total time: 90191.7736530304
+INFO:root:Average time: 90.1917736530304

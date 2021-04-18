@@ -1,0 +1,66 @@
+{
+   "add":[
+      {
+         "id":1,
+         "title":"How to get a good grade in 677 in 20 minutes a day.",
+         "topic":"distributed systems",
+         "stock":1000,
+         "cost":1
+      },
+      {
+         "id":2,
+         "title":"RPCs for Dummies.",
+         "topic":"distributed systems",
+         "stock":1000,
+         "cost":10
+      },
+      {
+         "id":3,
+         "title":"Xen and the Art of Surviving Graduate School.",
+         "topic":"graduate school",
+         "stock":1000,
+         "cost":100
+      },
+      {
+         "id":4,
+         "title":"Cooking for the Impatient Graduate Student.",
+         "topic":"graduate school",
+         "stock":1000,
+         "cost":1000
+      }
+   ],
+   "query":[
+      {
+         "id":2,
+         "timestamp":1617657646.0878508
+      },
+      {
+         "id":2,
+         "timestamp":1617657646.1928873
+      },
+      {
+         "id":2,
+         "timestamp":1617657646.2875845
+      }
+   ],
+   "update":[
+      {
+         "id":2,
+         "stock":2000,
+         "cost":2000,
+         "timestamp":1617657646.1669874
+      },
+      {
+         "id":2,
+         "stock":2000,
+         "cost":2000,
+         "timestamp":1617657646.1869254
+      },
+      {
+         "id":2,
+         "stock":1999,
+         "cost":2000.0,
+         "timestamp":1617657646.1997094
+      }
+   ]
+}
