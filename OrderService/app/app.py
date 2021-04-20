@@ -12,10 +12,9 @@ import os
 import threading
 
 
-# Import config variables
-CATALOG_HOST = os.getenv('CATALOG_HOST')
+# Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
+CATALOG_HOST = os.getenv('CATALOG_HOST_2')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
-
 
 @app.before_first_request
 def init_database():
