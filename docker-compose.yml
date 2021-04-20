@@ -1,18 +1,19 @@
 version: '3.8'
 
 services:
-  catalog-service:
-    # container_name: catalog-service
+  catalog-service-1:
+    container_name: catalog-service-1
     build: ./CatalogService
 
     ports:
-      - "5001-5002:5002"
-    scale: 2
-    # To mount a local file to container 
-    # volumes:
-    # - type: bind
-    #   source: ./CatalogService/logfile.json
-    #   target: /CatalogService/logfile.json
+      - "5001:5002"
+  
+  catalog-service-2:
+    container_name: catalog-service-2
+    build: ./CatalogService
+
+    ports:
+      - "5002:5002"
   
   order-service:
     container_name: order-service
