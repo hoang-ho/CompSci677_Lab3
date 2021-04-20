@@ -7,6 +7,7 @@ from database_setup import Base, Book
 import threading
 import json
 import time
+import os
 
 app = Flask(__name__)
 api = Api(app)
@@ -19,6 +20,7 @@ Base.metadata.bind = engine
 
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
+CATALOG_HOST_PRIMARY = os.getenv('CATALOG_HOST_PRIMARY')
 
 
 def synchronized(func):
