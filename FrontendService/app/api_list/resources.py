@@ -19,7 +19,7 @@ logger.addHandler(consoleHandler)
 
 
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
-CATALOG_HOST = os.getenv('CATALOG_HOST_2')
+CATALOG_HOST = os.getenv('CATALOG_HOST_1')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
 ORDER_HOST = os.getenv('ORDER_HOST')
 ORDER_PORT = os.getenv('ORDER_PORT')

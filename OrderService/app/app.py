@@ -13,7 +13,7 @@ import threading
 
 
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
-CATALOG_HOST = os.getenv('CATALOG_HOST_2')
+CATALOG_HOST = os.getenv('CATALOG_HOST_1')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
 
 @app.before_first_request

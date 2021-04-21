@@ -5,10 +5,12 @@ services:
     # container_name: catalog-service
     image: catalog_service
     build: ./CatalogService
-
+    environment:
+      REPLICA_ID: '{{.Task.Slot}}'
     ports:
       - "5001-5002:5002"
     deploy:
+      mode: replicated
       replicas: 2
     env_file: config_env
 

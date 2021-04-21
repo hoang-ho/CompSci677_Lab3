@@ -1,6 +1,7 @@
-CATALOG_HOST_PRIMARY=flask_catalog_service_1
+CATALOG_HOST=flask_catalog_service
 CATALOG_HOST_1=flask_catalog_service_1
 CATALOG_HOST_2=flask_catalog_service_2
+CATALOG_MAX_REPLICAS=2
 CATALOG_PORT=5002
 ORDER_HOST=flask_order_service_1
 ORDER_PORT=5007

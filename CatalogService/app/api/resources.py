@@ -1,16 +1,18 @@
-from flask import Flask, request, jsonify
+from flask import request, jsonify
 from flask_restful import Api, Resource
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from database_setup import Base, Book
+from database.database_setup import Base, Book
+import logging
 import threading
 import json
 import time
-import os
 
-app = Flask(__name__)
-api = Api(app)
+
+logger = logging.getLogger('front-end-service')
+
+logger.setLevel(logging.INFO)  # set logger level
 
 # Connect to Database and create database session
 engine = create_engine('sqlite:///books-collection.db',
@@ -20,7 +22,6 @@ Base.metadata.bind = engine
 
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
-CATALOG_HOST_PRIMARY = os.getenv('CATALOG_HOST_PRIMARY')
 
 
 def synchronized(func):
@@ -35,6 +36,7 @@ def synchronized(func):
             return func(*args, **kws)
 
     return synced_func
+
 
 @synchronized
 def log_request(newData, key):
@@ -74,9 +76,8 @@ def update_data(json_request):
     return book.title
 
 
-@app.before_first_request
 def prepopulate():
-    app.logger.info("Prepopulate data")
+    logger.info("Prepopulate data")
     if (session.query(Book).first() is None):
         f = open('logfile.json', "r")
         data = json.loads(f.read())
@@ -94,6 +95,8 @@ def prepopulate():
                 session.query(Book).filter_by(
                     id=book["id"]).update({"stock": book["stock"], "cost": book["cost"]})
             session.commit()
+
+
 class Query(Resource):
     def get(self):
         '''
@@ -101,10 +104,11 @@ class Query(Resource):
         '''
         books = []
         request_data = request.get_json()
-        app.logger.info("Receive a query request ")
+        logger.info("Receive a query request ")
         if (request_data and ("id" in request_data or "topic" in request_data)):
             if ("id" in request_data):
-                books = session.query(Book).filter_by(id=request_data["id"]).all()
+                books = session.query(Book).filter_by(
+                    id=request_data["id"]).all()
                 if (len(books) == 0):
                     response = jsonify(success=False)
                     response.status_code = 400
@@ -134,15 +138,15 @@ class Query(Resource):
 class Buy(Resource):
     def put(self):
         '''
-        Handle put request for buy
-        Return 200 if buy succeeds
+        For a buy request, forward the request to the primary replica
         '''
-        app.logger.info("Receive a buy request")
+        logger.info("Receive a buy request")
         json_request = request.get_json()
+
         if ("id" in json_request):
             json_request["buy"] = True
             title = update_data(json_request)
-            app.logger.info("Update data for book " + title)
+            logger.info("Update data for book " + title)
             response = jsonify(book=title)
             response.status_code = 200
         else:
@@ -157,13 +161,13 @@ class Update(Resource):
         Handle put request for update
         Return 200 if update succeeds
         '''
-        app.logger.info("Receive an update request")
+        logger.info("Receive an update request")
         json_request = request.get_json()
 
         if (json_request and "id" in json_request):
             json_request["buy"] = False
             title = update_data(json_request)
-            app.logger.info("Update data for book " + title)
+            logger.info("Update data for book " + title)
             json_response = {"message": "Done update", "book": title}
             response = jsonify(json_response)
             response.status_code = 200
@@ -173,12 +177,3 @@ class Update(Resource):
             response = jsonify(json_response)
             response.status_code = 400
             return response
-
-api.add_resource(Query, "/catalog/query")
-api.add_resource(Buy, "/catalog/buy")
-api.add_resource(Update, "/catalog/update")
-
-if __name__ == "__main__":
-    # run the application
-    app.debug = True
-    app.run(host='0.0.0.0', port=5002)
