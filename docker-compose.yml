@@ -1,19 +1,28 @@
 version: '3.8'
 
 services:
-  catalog_service:
-    # container_name: catalog-service
+  catalog_service_1:
+    container_name: catalog-service_1
     image: catalog_service
     build: ./CatalogService
     environment:
-      REPLICA_ID: '{{.Task.Slot}}'
+      REPLICA_ID: 1
+      LIST_IDS: "1,2"
     ports:
-      - "5001-5002:5002"
-    deploy:
-      mode: replicated
-      replicas: 2
+      - "5001:5002"
     env_file: config_env
-
+  
+  catalog_service_2:
+    container_name: catalog-service_2
+    image: catalog_service
+    build: ./CatalogService
+    environment:
+      REPLICA_ID: 2
+      LIST_IDS: "1,2"
+    ports:
+      - "5002:5002"
+    env_file: config_env
+  
   order_service:
     image: order_service
     build: 

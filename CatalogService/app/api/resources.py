@@ -4,15 +4,25 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from database.database_setup import Base, Book
+from ConsistencyProtocol.BullyAlgorithm import Node, BeginElection
+from utils import synchronized
+from sys import stdout
 import logging
 import threading
 import json
 import time
+import os
+import requests
 
 
-logger = logging.getLogger('front-end-service')
+logger = logging.getLogger("Catalog-Service")
 
 logger.setLevel(logging.INFO)  # set logger level
+logFormatter = logging.Formatter(
+    "%(name)-12s %(asctime)s %(levelname)-8s %(filename)s:%(funcName)s %(message)s")
+consoleHandler = logging.StreamHandler(stdout)  # set streamhandler to stdout
+consoleHandler.setFormatter(logFormatter)
+logger.addHandler(consoleHandler)
 
 # Connect to Database and create database session
 engine = create_engine('sqlite:///books-collection.db',
@@ -22,20 +32,8 @@ Base.metadata.bind = engine
 
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
-
-
-def synchronized(func):
-    '''
-    synchronized decorator
-    '''
-
-    func.__lock__ = threading.Lock()
-
-    def synced_func(*args, **kws):
-        with func.__lock__:
-            return func(*args, **kws)
-
-    return synced_func
+node = Node(int(os.getenv("REPLICA_ID")))
+lock = threading.Lock()
 
 
 @synchronized
@@ -96,6 +94,11 @@ def prepopulate():
                     id=book["id"]).update({"stock": book["stock"], "cost": book["cost"]})
             session.commit()
 
+class Ping(Resource):
+    def get(self):
+        response = jsonify({'Response': 'OK'})
+        response.status_code = 200
+        return response
 
 class Query(Resource):
     def get(self):
@@ -143,15 +146,22 @@ class Buy(Resource):
         logger.info("Receive a buy request")
         json_request = request.get_json()
 
-        if ("id" in json_request):
-            json_request["buy"] = True
-            title = update_data(json_request)
-            logger.info("Update data for book " + title)
-            response = jsonify(book=title)
-            response.status_code = 200
+        # forward request to primary
+        if (node.node_id != node.coordinator):
+            pass
         else:
-            response = jsonify(success=False)
-            response.status_code = 400
+            if ("id" in json_request):
+                json_request["buy"] = True
+                title = update_data(json_request)
+                
+                # concurrently update data in other replicas
+
+                logger.info("Update data for book " + title)
+                response = jsonify(book=title)
+                response.status_code = 200
+            else:
+                response = jsonify(success=False)
+                response.status_code = 400
         return response
 
 
@@ -177,3 +187,35 @@ class Update(Resource):
             response = jsonify(json_response)
             response.status_code = 400
             return response
+
+
+class NodeInfo(Resource):
+    def get(self):
+        response = jsonify(
+            {"node_id": node.node_id, "coordinator": node.coordinator})
+        response.status_code = 200
+        return response
+
+class Election(Resource):
+    counter = 0
+    def post(self):
+        lock.acquire()
+        Election.counter += 1
+        lock.release()
+
+        data = request.get_json()
+        if (Election.counter == 1 and data["node_id"] < node.node_id):
+            # Open up a thread to begin the Election
+            threading.Thread(target=BeginElection, args=(node, False)).start()
+        response = jsonify({'Response': 'OK'})
+        response.status_code = 200
+        return response
+
+class Coordinator(Resource):
+    def post(self):
+        data = request.get_json()
+        node.coordinator = data["coordinator"]
+        logger.info("Setting Coordinator as %d in node %d" % (node.coordinator, node.node_id))
+        response = jsonify({'Response': 'OK'})
+        response.status_code = 200
+        return response
