@@ -1,4 +1,7 @@
-CATALOG_HOST=catalog-service-2
+CATALOG_HOST=catalog_service
+CATALOG_HOST_1=catalog_service_1
+CATALOG_HOST_2=catalog_service_2
+CATALOG_MAX_REPLICAS=2
 CATALOG_PORT=5002
-ORDER_HOST=order-service
+ORDER_HOST=flask_order_service_1
 ORDER_PORT=5007

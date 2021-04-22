@@ -1,7 +1,6 @@
 FROM python:3.7
-COPY requirements.txt /CatalogService/requirements.txt
-WORKDIR /CatalogService
+ADD app/ /app
+WORKDIR /app
 RUN pip install -r requirements.txt
-COPY . /CatalogService
-ENTRYPOINT ["python"]
+ENTRYPOINT ["python3"]
 CMD ["app.py"]
