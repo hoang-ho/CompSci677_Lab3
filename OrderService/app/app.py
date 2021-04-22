@@ -40,7 +40,7 @@ class LogService(Resource):
         return result
 
 class OrderService(Resource):
-
+    order_count=0
     def put(self):
         '''
         Handle a put request to buy a book
@@ -55,7 +55,12 @@ class OrderService(Resource):
              time_stamp = str(datetime.now())
              cur.execute("INSERT INTO buy_logs (request_id,timestamp) VALUES( ?, ?)",  (id,time_stamp ))
              conn.commit()
-        response = requests.get(f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query", json={"id": id})
+        OrderService.order_count+=1
+        if OrderService.order_count%2=0:
+            response = requests.get(f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query", json={"id": id})
+        else:
+            response = requests.get(f"http://{CATALOG_HOST}_1:{CATALOG_PORT}/catalog/query", json={"id": id})
+
         response_json = response.json()
         if response.status_code!=200:
             return {'message': "Error in receiving response from catalog service"}, 500

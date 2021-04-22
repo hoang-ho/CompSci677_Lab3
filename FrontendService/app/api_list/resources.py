@@ -33,7 +33,7 @@ class Search(Resource):
     '''
     Handle search by topic request
     '''
-
+    search_count=0
     t_start = time.time()
     t_end = 0
     def get(self, topic_name=None):
@@ -62,8 +62,13 @@ class Search(Resource):
             target_key = f'search-{topic_name}'
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
+                Search.search_count+=1
                 logger.info(f'calling the backend server')
-                response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+                if Search.search_count%2==0:
+                    response = requests.get(f'http://{CATALOG_HOST}_1:{CATALOG_PORT}/catalog/query', json=data)
+                else:
+                    response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+
                 if response.status_code == 200:
                     self.t_end = time.time()
                     logger.info(f'execution time for search: {self.t_end-self.t_start}')
@@ -84,7 +89,7 @@ class LookUp(Resource):
     '''
     Handle look by id request
     '''
-
+    lookup_count = 0
     t_start = time.time()
     t_end = 0
     def get(self, item_id=None):
@@ -111,7 +116,11 @@ class LookUp(Resource):
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
                 logger.info(f'calling the backend server')
-                response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+                LookUp.lookup_count+=1
+                if LookUp.lookup_count%2==0:
+                    response = requests.get(f'http://{CATALOG_HOST}_1:{CATALOG_PORT}/catalog/query', json=data)
+                else:
+                    response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
                 if response.status_code == 200:
                     self.t_end = time.time()
                     logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
