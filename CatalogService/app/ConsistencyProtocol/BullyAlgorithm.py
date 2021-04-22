@@ -11,13 +11,6 @@ CATALOG_PORT = os.getenv("CATALOG_PORT")
 
 logger = logging.getLogger("Catalog-Service")
 
-logger.setLevel(logging.INFO)  # set logger level
-logFormatter = logging.Formatter(
-    "%(name)-12s %(asctime)s %(levelname)-8s %(filename)s:%(funcName)s %(message)s")
-consoleHandler = logging.StreamHandler(stdout)  # set streamhandler to stdout
-consoleHandler.setFormatter(logFormatter)
-logger.addHandler(consoleHandler)
-
 class Node:
     def __init__(self, coordinator=-1):
         '''
@@ -33,18 +26,10 @@ def BeginElection(node, wait=True):
     # Check if there is no election currently going on
     election_ready = ready_for_election(node.neighbors)
     logger.info("Election ready? " + str(election_ready))
-
-    if wait:
-        timeout = random.randint(5, 10)
-        time.sleep(timeout)
-        logger.info('timeouting in %s seconds' % timeout)
-    
     
     if election_ready:
         logger.info('Starting election in: %s' % node.node_id)
         higher_ids = [id_ for id_ in node.neighbors if id_ > node.node_id]
-
-        logger.info(' '.join(map(str, higher_ids)))
         
         # we are the node with the highest id
         if (len(higher_ids) == 0):
