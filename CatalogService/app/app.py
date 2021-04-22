@@ -51,7 +51,6 @@ def activate_election():
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
 
-
 if __name__ == "__main__":
     # run the application
     app.debug = True

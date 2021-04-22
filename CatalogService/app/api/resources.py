@@ -15,6 +15,9 @@ import os
 import requests
 
 
+CATALOG_HOST = os.getenv("CATALOG_HOST")
+CATALOG_PORT = os.getenv("CATALOG_PORT")
+
 logger = logging.getLogger("Catalog-Service")
 
 logger.setLevel(logging.INFO)  # set logger level
@@ -32,7 +35,7 @@ Base.metadata.bind = engine
 
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
-node = Node(int(os.getenv("REPLICA_ID")))
+node = Node()
 lock = threading.Lock()
 
 
@@ -67,11 +70,11 @@ def update_data(json_request):
     if (json_request["buy"]):
         book.stock -= 1
 
-    logRequest = {"id": book.id, "stock": book.stock,
+    logRequest = {"id": book.id, "title": book.title, "stock": book.stock,
                   "cost": book.cost, "timestamp": time.time()}
     log_request(logRequest, "update")
 
-    return book.title
+    return logRequest
 
 
 def prepopulate():
@@ -148,22 +151,44 @@ class Buy(Resource):
 
         # forward request to primary
         if (node.node_id != node.coordinator):
-            pass
+            primary = node.coordinator
+            url = f"http://{CATALOG_HOST}_{primary}:{CATALOG_PORT}/catalog/buy"
+            response = requests.put(url, json=json_request)
+            if (response.status_code == 200):
+                return response.json(), 200
+            else:
+                return response.json(), 500
         else:
+            # if we are the primary
             if ("id" in json_request):
+                # update the stock in our database
                 json_request["buy"] = True
-                title = update_data(json_request)
-                
-                # concurrently update data in other replicas
+                log_request = update_data(json_request)
 
-                logger.info("Update data for book " + title)
-                response = jsonify(book=title)
+                # concurrently update data in other replicas
+                update_request = {
+                    "id": log_request["id"], "stock": log_request["stock"]}
+                threads = list()
+
+                # Assuming no fault for now so all update requests should succeed
+                for replica in node.neighbors:
+                    url = f"http://{CATALOG_HOST}_{replica}:{CATALOG_PORT}/catalog/update"
+                    t = threading.Thread(target=requests.put, args=(url,), kwargs={"json": update_request})
+                    threads.append(t)
+                    t.start()
+                
+                for t in threads:
+                    t.join()
+                
+                # send back a response
+                logger.info("Update data %s", log_request)
+                response = jsonify(book=log_request["title"])
                 response.status_code = 200
+                return response
             else:
                 response = jsonify(success=False)
                 response.status_code = 400
-        return response
-
+                return response
 
 class Update(Resource):
     def put(self):
@@ -176,9 +201,9 @@ class Update(Resource):
 
         if (json_request and "id" in json_request):
             json_request["buy"] = False
-            title = update_data(json_request)
-            logger.info("Update data for book " + title)
-            json_response = {"message": "Done update", "book": title}
+            log_request = update_data(json_request)
+            logger.info("Update data for book %s", log_request)
+            json_response = {"message": "Done update", "book": log_request["title"]}
             response = jsonify(json_response)
             response.status_code = 200
             return response
