@@ -1,79 +1,43 @@
-# Multi-tier Microservices WebApp
-Programming Lab2 for the course CS 677: Distributed OS. In this lab we have to implement a microservices architecture using REST APIs. We have to emulate a bookstore running on a single server with a single buyer. The bookstore components (front-end, catalogue and order) are deployed as three processes and a fourth process representing the client performing interface calls to the front-end process.
+# Milestone 1
+**Deliverables:** In this milestone we had to extend the previous programming lab 2 to implement features such as - Caching and it's invalidation, load balancing at the front end server and replication and consistency of the catalog server and the order server.
+**Assumption:** As per the documentation, we have implemented an in-memory cache implementation. The cache invalidation is a server side push technique. Also, 2 replicas are implemented for the catalog and the order server.
 
-**Assumption:** As per the documentation, the `search` operation returns only `id and topic` fields and the `lookup` operation returns only `cost and stock` fields.
+## Technical Overview
 
-## To deploy to EC2
+The following section briefly describes the implementation details of the features implemented in the Microservice. Here, the most basic techniques are used to implement the features because the application is not data intensive and the architecture is not that complex.
 
-### Creating and Running Instances
-Create 3 EC2 instances using ami-085ca2d6000e2a2e9 (this is a customized image with docker, docker-composed and git repo cloned and installed).
+### Caching and Invalidation of Caching
 
-> NOTE: If you want to use your own ami, you will need to set up docker, git and security group beforehand
+A simple in memory dictionary acts as a cache at the front end server. Here, when the front end receives the request it first checks if the data is present in cache. If it is present it returns the cached result to the client, else it forwards the request to the appropriate server and caches the response and returns it to the client.
 
-```
-$ aws ec2 run-instances --image-id ami-085ca2d6000e2a2e9 --instance-type t2.micro --key-name 677kp
-$ aws ec2 describe-instances --instance-id $INSTANCE_ID
-```
+Also, the front end server has an API endpoint to invalidate the cache. Everytime a request makes an update to the database, before writing the changes to the database, the catalog server calls this endpoint to invalidate the cache if it exists on the front end and then writes the changes to the database.
 
-From the last command, save down the Public IPv4 DNS and the Private IPv4 addresses for each instance. Next, ssh into the instance
+### Load Balancer at Frontend Server
 
-### Updating the Security Group Settings
+A simple round robin algorithm is used to implement the load balancer. The round robin algorithm guarantees that all the servers has the same workload. To gurantee this, alternate requests are sent to different replicas.
 
-Confirm the rules for incoming traffic as follows. In the Inbound rules section, create the following rules (choose Add rule for each new rule):
+### Database Replication and Consistency
 
-- Choose HTTP from the Type list, port 80 for port range, and make sure that Source is set to Anywhere (0.0.0.0/0).
-- Choose HTTPS from the Type list, port 443 for port range, and make sure that Source is set to Anywhere (0.0.0.0/0).
-- Choose Custom TCP from the Type list, 5000-6000 for Port Range, and make sure that Source is set to Anywhere (0.0.0.0/0).
+To maintain consistency across the two different replicas of catalog server, we have implemented a `Primary-Backup` protocal. Moreover, to decide the Primary server we are using the Bully algorithm to elect the primary catalog server.
 
-### Setting up the Instances
-
-ssh into each of the instance as follows:
+## Setting up the environment locally
 
 ```
-$ ssh -i <path-to-677kp.pem-file> ec2-user@$PUBLIC_IPv4_DNS
+$ cd CompSci677_Lab3
+```
+```
+$ docker-compose up --build
 ```
 
-Change the working directory to the repository's root folder
+> Note: To run a particular container use the following command: docker-compose up --build container-name
+
+To remove all the stopped containers
 
 ```
-$ cd Microservices-Web-App
+docker-compose down -v --rmi all --remove-orphans
 ```
 
-### Setting up the config_env File
-
-For the instance you choose to server the catalog-service, put its Private IPv4 address in the `./config_env` file for the field name `CATALOG_HOST`, similarly update the `ORDER_HOST` for the order-service.
-
-You repeat this step for EC2 instances that you choose to server front-end-service and the order-service as follows:
-> NOTE: If you want to change the port, please remember to update the security group, the config_env and the docker-compose file!
-
-```
-# Modify the config_env
-$ vim config_env
-```
-
-### Deploying and Running Containers in EC2 Instances
-
-Now we're done setting up and will start deploying as follows:
-
-In the instance you choose to be front-end-service run
-
-```
-$ docker-compose up --build front-end-service
-```
-
-In the instance you choose to be catalog-service run
-
-```
-$ docker-compose up --build catalog-service
-```
-
-In the instance you choose to be order-service run
-
-```
-$ docker-compose up --build order-service
-```
-
-### Testing from the Client
+## Testing from the Client
 
 From your local machine, to test the API run the following commands
 
@@ -93,40 +57,17 @@ $ curl --request GET $FRONT_END_PUBLIC_IPv4_DNS:5004/lookup/<book_id>
 curl --header "Content-Type: application/json" --request PUT  --data '{"id": 1, "stock":2000, "cost":2000}' http://$CATALOG_PUBLIC_IPv4_DNS:5002/catalog/update
 ```
 
-### Sample Output:
 
-> NOTE: More sample outputs can be found under ./doc/outputs folder
+## Test Scripts for Testing Locally
+
+> NOTE: Please don't update the `./config_env` file on the client machine to run the tests locally.
 
 ```
-curl --request GET $FRONT_END_PUBLIC_IPv4_DNS:5004/search/distributed-systems
-{
-    "items": {
-        "How to get a good grade in 677 in 20 minutes a day.": 1,
-        "RPCs for Dummies.": 2
-    }
-}
+$ cd CompSci677_Lab3
 ```
-
-## Test Scripts for Testing
-
-1. To test services deployed on AWS EC2 instances
-
-    Follow the `To Deploy to EC2 Instance` steps and then run the below command from the client that has the git repo cloned. The output of the test is in a newly created txt file - `out.txt`.
-    ```
-    $ cd Microservices-Web-App
-    $ bash test.sh $FRONT_END_SERVER_PUBLIC_IPv4_DNS $CATALOG_SERVER_PUBLIC_IPv4_DNS
-    ```
-
-2. To test services deployed locally
-
-    Follow the `To Deploy to EC2 Instance` steps and then run the below command from the client that has the git repo cloned. The output of the test is in a newly created txt file - `out.txt`.
-
-    > NOTE: Please don't update the `./config_env` file on the client machine to run the tests locally.
-
-    ```
-    $ cd Microservices-Web-App
-    $ bash test_local.sh
-    ```
+```
+$ bash test_local.sh
+```
 
 ## Simulating Concurrency
 
@@ -177,17 +118,6 @@ INFO:root:Look up the book stock and cost after update and buy: {
 
 As we can see from the terminal log, we have 2 update requests and 1 buy requests. The two update requests are done first, and thus, the stock for book 2 is set to 2000.0 and its cost is set to 2000.0. When the buy request comes in, the stock is set to 1999 and the cost remains the same!
 
-## Evalation
-1. Time to complete 1000 sequential requests by one user
-```
-INFO:root:Total time: 90191.7736530304
-INFO:root:Average time: 90.1917736530304
-```
-2. Time to complete 1000 sequential requests by 5 user at a time
-```
-INFO:root:Total time: 136533.04195404053
-INFO:root:Average time: 136.53304195404053
-```
 
 ## Logging on Catalog and Order Services
 
@@ -214,6 +144,6 @@ INFO:root:Average time: 136.53304195404053
     To view the logs for the order-service call the following request while the container is running
 
     ```
-    curl --header "Content-Type: application/json" --request GET http://$ORDER_PUBLIC_IPv4_DNS:5007/log
+    curl --header "Content-Type: application/json" --request GET http://localhost:5007/log
     ```
 
