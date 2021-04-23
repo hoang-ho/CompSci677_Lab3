@@ -1,7 +1,7 @@
 # Milestone 1
 **Deliverables:** In this milestone we had to extend the previous programming lab 2 to implement features such as - Caching and it's invalidation, load balancing at the front end server and replication and consistency of the catalog server and the order server.
 
-**Assumption:** As per the documentation, we have implemented an in-memory cache implementation. The cache invalidation is a server side push technique. Also, 2 replicas are implemented for the catalog and the order server.
+**Assumption:** As per the documentation, we have implemented an in-memory cache implementation. The cache invalidation is a server side push technique. Also, 2 replicas are implemented for the catalog and the order server. Moreover, the system is built considering no faults will occur!
 
 ## Technical Overview
 
@@ -14,6 +14,8 @@ A simple in memory dictionary acts as a cache at the front end server. Here, whe
 Also, the front end server has an API endpoint to invalidate the cache. Everytime a request makes an update to the database, before writing the changes to the database, the catalog server calls this endpoint to invalidate the cache if it exists on the front end and then writes the changes to the database.
 
 ### Load Balancer at Frontend Server
+
+> Note: The order_service_1 will always communicate with catalog_service_1 and order_service_2 will always communicate with catalog_service_2.
 
 A simple round robin algorithm is used to implement the load balancer. The round robin algorithm guarantees that all the servers has the same workload. To gurantee this, alternate requests are sent to different replicas.
 
