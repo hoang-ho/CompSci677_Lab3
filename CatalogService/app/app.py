@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_restful import Api
-from api.resources import Ping, Query, Buy, Update, NodeInfo, Election, Coordinator, node, prepopulate, logger
+from api.resources import Ping, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, node, prepopulate, logger
 from ConsistencyProtocol.BullyAlgorithm import BeginElection
 import threading
 import os
@@ -41,6 +41,7 @@ api.add_resource(Ping, "/")
 api.add_resource(Query, "/catalog/query")
 api.add_resource(Buy, "/catalog/buy")
 api.add_resource(Update, "/catalog/update")
+api.add_resource(PrimaryUpdate, "/update_database")
 api.add_resource(NodeInfo, "/info")
 api.add_resource(Election, "/election")
 api.add_resource(Coordinator, "/coordinator")

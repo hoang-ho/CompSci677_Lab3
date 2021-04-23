@@ -14,8 +14,6 @@ import time
 import os
 import requests
 
-
-CATALOG_HOST = os.getenv("CATALOG_HOST")
 CATALOG_PORT = os.getenv("CATALOG_PORT")
 
 FRONTEND_HOST = os.getenv("FRONTEND_HOST")
@@ -101,11 +99,25 @@ def prepopulate():
             session.commit()
 
 
+def propagateUpdates(update_request):
+    threads = list()
+
+    # Assuming no fault for now so all update requests should succeed
+    for neighbor, url in node.neighbors.items():
+        endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
+        logger.info("Propagate updates to endpoint %s", endpoint)
+        t = threading.Thread(target=requests.put, args=(
+            endpoint,), kwargs={"json": update_request})
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
 def push_invalidate_cache(id):
     data = {'id': id}
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
-
 
 class Ping(Resource):
     def get(self):
@@ -160,19 +172,10 @@ class Buy(Resource):
         logger.info("Receive a buy request")
         json_request = request.get_json()
 
-        # forward request to primary
-        if (node.node_id != node.coordinator):
-            primary = node.coordinator
-            url = f"http://{CATALOG_HOST}_{primary}:{CATALOG_PORT}/catalog/buy"
-            response = requests.put(url, json=json_request)
-            if (response.status_code == 200):
-                return response.json(), 200
-            else:
-                return response.json(), 500
-        else:
+        if (node.node_id == node.coordinator):
             # if we are the primary
             if ("id" in json_request):
-                 # Invalidating the cache before writing to database
+                # Invalidating the cache before writing to database
                 push_invalidate_cache(json_request['id'])
 
                 # Writing to database
@@ -182,20 +185,10 @@ class Buy(Resource):
                 log_request = update_data(json_request)
 
                 # concurrently update data in other replicas
-                update_request = {
-                    "id": log_request["id"], "stock": log_request["stock"]}
-                threads = list()
+                update_request = {"coordinator": node.node_id,
+                                  "id": log_request["id"], "stock": log_request["stock"]}
+                propagateUpdates(update_request)
 
-                # Assuming no fault for now so all update requests should succeed
-                for replica in node.neighbors:
-                    url = f"http://{CATALOG_HOST}_{replica}:{CATALOG_PORT}/catalog/update"
-                    t = threading.Thread(target=requests.put, args=(url,), kwargs={"json": update_request})
-                    threads.append(t)
-                    t.start()
-                
-                for t in threads:
-                    t.join()
-                
                 # send back a response
                 logger.info("Update data %s", log_request)
                 response = jsonify(book=log_request["title"])
@@ -205,7 +198,44 @@ class Buy(Resource):
                 response = jsonify(success=False)
                 response.status_code = 400
                 return response
+        else:
+            # forward request to primary
+            logger.info("Forward update request to primary")
+            primary = node.coordinator
+            url = node.neighbors[primary]
+            endpoint = f"http://{url}:{CATALOG_PORT}/catalog/buy"
+            response = requests.put(endpoint, json=json_request)
+            if (response.status_code == 200):
+                return response.json(), 200
+            else:
+                return response.json(), 500
+class PrimaryUpdate(Resource):
+    def put(self):
+        '''
+        Handle update request sent from primary server
+        '''
+        json_request = request.get_json()
+        if (json_request.get("coordinator", -1) != node.coordinator):
+            json_response = {"message": "Update not successful"}
+            response = jsonify(json_response)
+            response.status_code = 400
+            return response
 
+        if (json_request and "id" in json_request):
+            # Writing to database
+            json_request["buy"] = False
+            log_request = update_data(json_request)
+            logger.info("Update data for book %s", log_request)
+            json_response = {"message": "Done update",
+                            "book": log_request["title"]}
+            response = jsonify(json_response)
+            response.status_code = 200
+            return response
+        else:
+            json_response = {"message": "Update not successful"}
+            response = jsonify(json_response)
+            response.status_code = 400
+            return response
 
 class Update(Resource):
     def put(self):
@@ -216,24 +246,42 @@ class Update(Resource):
         logger.info("Receive an update request")
         json_request = request.get_json()
 
-        if (json_request and "id" in json_request):
-            # Invalidating the cache before writing to database
-            push_invalidate_cache(json_request['id'])
+        # if we are the coordinator
+        if (node.node_id == node.coordinator):
+            # update the database and propagate it to all replicas
+            if (json_request and "id" in json_request):
+                # Invalidating the cache before writing to database
+                push_invalidate_cache(json_request['id'])
 
-            # Writing to database
-            json_request["buy"] = False
-            log_request = update_data(json_request)
-            logger.info("Update data for book %s", log_request)
-            json_response = {"message": "Done update", "book": log_request["title"]}
-            response = jsonify(json_response)
-            response.status_code = 200
-            return response
+                json_request["buy"] = False
+                log_request = update_data(json_request)
+
+                # concurrently update data in other replicas
+                update_request = {"coordinator": node.node_id,
+                                    "id": log_request["id"], "stock": log_request["stock"], "cost": log_request["cost"]}
+                propagateUpdates(update_request)
+
+                logger.info("Update data for book %s", log_request)
+                json_response = {"message": "Done update", "book": log_request["title"]}
+                response = jsonify(json_response)
+                response.status_code = 200
+                return response
+            else:
+                json_response = {"message": "Update not successful"}
+                response = jsonify(json_response)
+                response.status_code = 400
+                return response
         else:
-            json_response = {"message": "Update not successful"}
-            response = jsonify(json_response)
-            response.status_code = 400
-            return response
-
+            # forward the request to the primary
+            primary = node.coordinator
+            url = node.neighbors[primary]
+            endpoint = f"http://{url}:{CATALOG_PORT}/catalog/update" 
+            logger.info("Forward update request to primary %s", endpoint)
+            response = requests.put(endpoint, json=json_request)
+            if (response.status_code == 200):
+                return response.json(), 200
+            else:
+                return response.json(), 500
 
 class NodeInfo(Resource):
     def get(self):

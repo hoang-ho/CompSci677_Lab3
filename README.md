@@ -22,6 +22,8 @@ To maintain consistency across the two different replicas of catalog server, we 
 
 ## Setting up the environment locally
 
+Clone the repo and run the following commands:
+
 ```
 $ cd CompSci677_Lab3
 ```
@@ -37,26 +39,72 @@ To remove all the stopped containers
 docker-compose down -v --rmi all --remove-orphans
 ```
 
-## Testing from the Client
+## Available commands to run from the client
+**Prerequisites:** Please make sure the environment is runnning by following the above commands.
 
-From your local machine, to test the API run the following commands
 
-```
-$ curl --request GET $FRONT_END_PUBLIC_IPv4_DNS:5004/search/<topic_name>
-```
-
-```
-$ curl --request POST $FRONT_END_PUBLIC_IPv4_DNS:5004/buy/<book_id>
-```
+1. To search for books by topic:
+> API Endpoint: GET http://localhost:5004/search/topic-name
 
 ```
-$ curl --request GET $FRONT_END_PUBLIC_IPv4_DNS:5004/lookup/<book_id>
+$ curl --request GET http://localhost:5004/search/distributed-systems
+{
+    "items": {
+        "How to finish Project 3 on time.": 5,
+        "How to get a good grade in 677 in 20 minutes a day.": 1,
+        "RPCs for Dummies.": 2,
+        "Why theory classes are so hard.": 6
+    }
+}
 ```
 
 ```
-curl --header "Content-Type: application/json" --request PUT  --data '{"id": 1, "stock":2000, "cost":2000}' http://$CATALOG_PUBLIC_IPv4_DNS:5002/catalog/update
+$ curl --request GET http://localhost:5004/search/graduate-school 
+{
+    "items": {
+        "Cooking for the Impatient Graduate Student.": 4,
+        "Spring in Pioneer Valley.": 7,
+        "Xen and the Art of Surviving Graduate School.": 3
+    }
+}
 ```
 
+2. To lookup books by id:
+> API Endpoint: GET http://localhost:5004/lookup/book-id
+
+```
+$ curl --request GET http://localhost:5004/lookup/1
+{
+    "cost": 1000.0,
+    "stock": 1000
+}
+```
+
+3. To buy a book by id:
+> API Endpoint: POST http://localhost:5004/buy/book-id
+
+```
+$ curl --request POST http://localhost:5004/buy/2 
+{
+    "message": "successfully purchased the book How to get a good grade in 677 in 20 minutes a day."
+}
+```
+
+4. To hit the catalog service directly to update the cost or the stock of an item
+   
+```
+$ curl --header "Content-Type: application/json" --request PUT  --data '{"id": 1, "stock":2000, "cost":2000}' http://localhost:5002/catalog/update
+{
+    "book": "How to get a good grade in 677 in 20 minutes a day.",
+    "message": "Done update"
+}
+
+$ curl --request GET http://localhost:5004/lookup/1
+{
+    "cost": 2000.0,
+    "stock": 2000
+}
+```
 
 ## Test Scripts for Testing Locally
 
@@ -65,85 +113,7 @@ curl --header "Content-Type: application/json" --request PUT  --data '{"id": 1, 
 ```
 $ cd CompSci677_Lab3
 ```
+
 ```
 $ bash test_local.sh
 ```
-
-## Simulating Concurrency
-
-To simulate a concurrency situation with buy and update, run the python file `./SimulateConcurrency.py`. 
-
-> NOTE: Please make sure to have the `requests` library installed on the client.
-
-Sample Output:
-
-```
-(base) Hoangs-MacBook-Pro:Microservices-Web-App hoangho$ python3 SimulateConcurrency.py --front-end-dns $FRONT_END_SERVER_PUBLIC_IPv4_DNS  --catalog-dns $CATALOG_SERVER_PUBLIC_IPv4_DNS 
-
-INFO:root:Look up the book stock and cost before update and buy: {
-    "cost": 10.0,
-    "stock": 1000
-}
-INFO:root:Main    : create and start thread 0.
-INFO:root:Calling request http://ec2-100-25-36-171.compute-1.amazonaws.com/buy/2 at timestamp 1617657154.635759
-INFO:root:Main    : create and start thread 1.
-INFO:root:Calling request http://ec2-100-25-36-171.compute-1.amazonaws.com/buy/2 at timestamp 1617657154.6362062
-INFO:root:Main    : create and start thread 2.
-INFO:root:Calling request http://ec2-54-210-80-160.compute-1.amazonaws.com/catalog/update at timestamp 1617657154.636657
-INFO:root:Calling request http://ec2-54-210-80-160.compute-1.amazonaws.com/catalog/update at timestamp 1617657154.636717
-INFO:root:Main    : before joining thread 0.
-INFO:root:Response: {
-  "book": "RPCs for Dummies.", 
-  "message": "Done update"
-}
- at time stamp 1617657154.725301
-INFO:root:Response: {
-    "message": "successfully purchased the book RPCs for Dummies."
-}
- at time stamp 1617657154.74664
-INFO:root:Main    : thread 0 done
-INFO:root:Main    : before joining thread 1.
-INFO:root:Response: {
-    "message": "successfully purchased the book RPCs for Dummies."
-}
- at time stamp 1617657154.758931
-INFO:root:Main    : thread 1 done
-INFO:root:Main    : before joining thread 2.
-INFO:root:Main    : thread 2 done
-INFO:root:Look up the book stock and cost after update and buy: {
-    "cost": 2000.0,
-    "stock": 1998
-}
-```
-
-As we can see from the terminal log, we have 2 update requests and 1 buy requests. The two update requests are done first, and thus, the stock for book 2 is set to 2000.0 and its cost is set to 2000.0. When the buy request comes in, the stock is set to 1999 and the cost remains the same!
-
-
-## Logging on Catalog and Order Services
-
-1. Catalog Service
-
-    Logging happens in `logfile.json` inside the Docker container catalog-service. To check the logs run the following command while the container is running
-
-    ```
-    $ docker exec -it catalog-service bash 
-    ```
-
-    Inside the container, check the logfile.json:
-
-    ```
-    $ cat logfile.json
-    ```
-
-    > A buy request will be logged in the "buy" key of the json object. 
-    
-    > A query request will be logged in the "query" key of the json object. 
-
-2. Order Service
-
-    To view the logs for the order-service call the following request while the container is running
-
-    ```
-    curl --header "Content-Type: application/json" --request GET http://localhost:5007/log
-    ```
-
