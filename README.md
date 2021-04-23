@@ -21,11 +21,37 @@ A simple round robin algorithm is used to implement the load balancer. The round
 
 To maintain consistency across the two different replicas of catalog server, we have implemented a `Primary-Backup` protocal. Moreover, to decide the Primary server we are using the Bully algorithm to elect the primary catalog server.
 
-#### Database Consistency
-
-For milestone 1 & 2, CatalogService has two replicas: one exposed on port 5001 and the other exposed on port 5002.
-
 ## Setting up the environment locally
+
+### Directly Downloading from Docker
+
+Follow the following steps to set up the environment:
+
+1. Create a network for docker containers to communicate:
+```
+docker network create -d bridge my-bridge-network
+```
+
+2. Create individual containers for all the micro services and the replicas as follows:
+> Note: Please have an environment file for every container. The environment file can be download from the ./env folder for each container also.
+
+```
+docker run --env-file <path_to_env_file>/catalog_service_1 -p 5001:5002 --network my-bridge-network --name catalog_service_1 hoangho/catalog_service
+```
+```
+docker run --env-file <path_to_env_file>/catalog_service_2 -p 5002:5002 --network my-bridge-network --name catalog_service_2 hoangho/catalog_service
+```
+```
+docker run --env-file <path_to_env_file>/order_service_1 -p 5007:5007 --network my-bridge-network --name order_service_1 hoangho/order_service
+```
+```
+docker run --env-file <path_to_env_file>/order_service_2 -p 5006:5007 --network my-bridge-network --name order_service_2 hoangho/order_service
+```
+```
+docker run --env-file <path_to_env_file>/front_end_service -p 5004:5004 --network my-bridge-network --name front_end_service hoangho/front_end_service
+```
+
+### Running from the GitHub Repository
 
 Clone the repo and run the following commands:
 
@@ -113,11 +139,10 @@ $ curl --request GET http://localhost:5004/lookup/1
 
 ## Test Scripts for Testing Locally
 
-> NOTE: Please don't update the `./config_env` file on the client machine to run the tests locally.
+> NOTE: If setting and running from the GitHub Repository please don't update the `./config_env` file on the client machine to run the tests locally.
+
+> NOTE: If setting and running by pulling images directly from the Dockerhub Repositry please make sure that all the containers are running.
 
 ```
-$ cd CompSci677_Lab3
-```
-```
-$ bash test_local.sh
+$ bash <path_to_file>/test_local.sh
 ```
