@@ -23,7 +23,9 @@ logger.addHandler(consoleHandler)
 CATALOG_HOST_1 = os.getenv('CATALOG_HOST_1')
 CATALOG_HOST_2 = os.getenv('CATALOG_HOST_2')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
-ORDER_HOST = os.getenv('ORDER_HOST')
+# Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
+ORDER_HOST_1 = os.getenv('ORDER_HOST_1')
+ORDER_HOST_2 = os.getenv('ORDER_HOST_2')
 ORDER_PORT = os.getenv('ORDER_PORT')
 
 
@@ -141,7 +143,7 @@ class Buy(Resource):
     '''
     Handle buy by id request
     '''
-
+    buy_count=0
     t_start = time.time()
     t_end = 0
     def post(self, item_id=None):
@@ -164,7 +166,11 @@ class Buy(Resource):
 
         # requesting to order
         try:
-            response = requests.put(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
+            if Buy.buy_count % 2 == 0:
+                response = requests.put(f'http://{ORDER_HOST_1}:{ORDER_PORT}/order', json=data)
+            else:
+                response = requests.put(f'http://{ORDER_HOST_2}:{ORDER_PORT}/order', json=data)
+
             if response.status_code == 200:
                 self.t_end = time.time()
                 logger.info(f'execution time for buy: {self.t_end-self.t_start}')
