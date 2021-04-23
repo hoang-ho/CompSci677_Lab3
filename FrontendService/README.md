@@ -26,7 +26,7 @@ This specifies a book id for purchase. This in turn calls the order service.
 To deploy locally, git clone the repo. Then perform the following steps in the mentioned order:
 
 ```
-1. $ cd Microservices-web-app
+1. $ cd CompSci677_Lab3
 2. $ docker-compose up -d --build front-end-service
 ```
 
