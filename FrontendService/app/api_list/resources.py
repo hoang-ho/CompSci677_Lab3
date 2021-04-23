@@ -1,6 +1,7 @@
 from flask import request
 from flask_restful import Resource
 from sys import stdout
+import threading
 
 import logging
 import os
@@ -23,9 +24,15 @@ logger.addHandler(consoleHandler)
 CATALOG_HOST_1 = os.getenv('CATALOG_HOST_1')
 CATALOG_HOST_2 = os.getenv('CATALOG_HOST_2')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
-ORDER_HOST = os.getenv('ORDER_HOST')
+# Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
+ORDER_HOST_1 = os.getenv('ORDER_HOST_1')
+ORDER_HOST_2 = os.getenv('ORDER_HOST_2')
 ORDER_PORT = os.getenv('ORDER_PORT')
 
+#locks
+search_lock = threading.Lock()
+lookup_lock = threading.Lock()
+buy_lock = threading.Lock()
 
 # Local caching
 cache = dict()
@@ -62,7 +69,9 @@ class Search(Resource):
             target_key = f'search-{topic_name}'
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
+                search_lock.acquire()
                 Search.search_count+=1
+                search_lock.release()
                 logger.info(f'calling the backend server')
                 if Search.search_count%2==0:
                     response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
@@ -116,7 +125,9 @@ class LookUp(Resource):
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
                 logger.info(f'calling the backend server')
+                lookup_lock.acquire()
                 LookUp.lookup_count+=1
+                lookup_lock.release()
                 if LookUp.lookup_count%2==0:
                     response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
                 else:
@@ -141,7 +152,7 @@ class Buy(Resource):
     '''
     Handle buy by id request
     '''
-
+    buy_count=0
     t_start = time.time()
     t_end = 0
     def post(self, item_id=None):
@@ -164,7 +175,14 @@ class Buy(Resource):
 
         # requesting to order
         try:
-            response = requests.put(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
+            buy_lock.acquire()
+            Buy.buy_count+=1
+            buy_lock.release()
+            if Buy.buy_count % 2 == 0:
+                response = requests.put(f'http://{ORDER_HOST_1}:{ORDER_PORT}/order', json=data)
+            else:
+                response = requests.put(f'http://{ORDER_HOST_2}:{ORDER_PORT}/order', json=data)
+
             if response.status_code == 200:
                 self.t_end = time.time()
                 logger.info(f'execution time for buy: {self.t_end-self.t_start}')

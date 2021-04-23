@@ -6,9 +6,7 @@ import time
 import random
 from utils import synchronized
 
-CATALOG_HOST = os.getenv("CATALOG_HOST")
 CATALOG_PORT = os.getenv("CATALOG_PORT")
-
 logger = logging.getLogger("Catalog-Service")
 
 class Node:
@@ -18,8 +16,10 @@ class Node:
         coordinator: id of the coordinator
         election: True if there is an election going on
         '''
-        self.node_id = int(os.getenv("REPLICA_ID"))
-        self.neighbors = [int(val) for val in os.getenv("LIST_IDS").split(",") if int(val) != self.node_id]
+        self.node_id = int(os.getenv("PROCESS_ID"))
+        all_ids = [int(val) for val in os.getenv("ALL_IDS").split(",")]
+        all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
+        self.neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids)) if all_ids[i] != self.node_id}
         self.coordinator = coordinator
 
 def BeginElection(node, wait=True):
@@ -29,7 +29,7 @@ def BeginElection(node, wait=True):
     
     if election_ready:
         logger.info('Starting election in: %s' % node.node_id)
-        higher_ids = [id_ for id_ in node.neighbors if id_ > node.node_id]
+        higher_ids = {id_:url for id_, url in node.neighbors.items() if id_ > node.node_id}
         
         # we are the node with the highest id
         if (len(higher_ids) == 0):
@@ -47,10 +47,10 @@ def BeginElection(node, wait=True):
 def ready_for_election(neighbors):
     coordinator_details = []
 
-    for id_ in neighbors:
-        url = f"http://{CATALOG_HOST}_{id_}:{CATALOG_PORT}/info"
-        logger.info("Sending request to " + url)
-        r = requests.get(url)
+    for id_, url in neighbors.items():
+        endpoint = f"http://{url}:{CATALOG_PORT}/info"
+        logger.info("Sending request to " + endpoint)
+        r = requests.get(endpoint)
         data = r.json()
         coordinator_details.append(data["coordinator"])
     
@@ -65,10 +65,9 @@ def election(node_id, higher_ids):
     data = {"node_id": node_id}
     response_codes = []
 
-    for id_ in higher_ids:
-        url = f"http://{CATALOG_HOST}_{id_}:{CATALOG_PORT}/election"
-
-        response = requests.post(url, json=data)
+    for id_, url in higher_ids.items():
+        endpoint = f"http://{url}:{CATALOG_PORT}/election"
+        response = requests.post(endpoint, json=data)
         response_codes.append(response.status_code)
 
     if 200 in response_codes:
@@ -79,12 +78,11 @@ def election(node_id, higher_ids):
 def announce(coordinator, neighbors):
     data = {"coordinator": coordinator}
 
-    for id_ in neighbors:
-        if id_ != coordinator:
-            url = f"http://{CATALOG_HOST}_{id_}:{CATALOG_PORT}/coordinator"
-            response = requests.post(url, json=data)
-
-            if (response.status_code == 200):
-                logger.info("Done notifying node %d" % id_)
-            else:
-                logger.info("Could not notify node %d"  % id_)
+    for id_, url in neighbors.items():
+        endpoint = f"http://{url}:{CATALOG_PORT}/coordinator"
+        response = requests.post(endpoint, json=data)
+        
+        if (response.status_code == 200):
+            logger.info("Done notifying node %d" % id_)
+        else:
+            logger.info("Could not notify node %d"  % id_)
