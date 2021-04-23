@@ -1,8 +1,0 @@
-Sample Output of Responses from Catalog Update Service
-
-REQUEST: curl --header "Content-Type: application/json" --request PUT  --data '{"id": 1, "stock": 10, "cost": 200}' <Public-IPv4-DNS>:5002/catalog/update
-
-{
-  "book": "How to get a good grade in 677 in 20 minutes a day.", 
-  "message": "Done update"
-}
