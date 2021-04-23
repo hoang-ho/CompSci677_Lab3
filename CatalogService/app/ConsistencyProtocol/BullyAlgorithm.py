@@ -6,9 +6,7 @@ import time
 import random
 from utils import synchronized
 
-CATALOG_HOST = os.getenv("CATALOG_HOST")
 CATALOG_PORT = os.getenv("CATALOG_PORT")
-
 logger = logging.getLogger("Catalog-Service")
 
 class Node:
@@ -50,7 +48,7 @@ def ready_for_election(neighbors):
     coordinator_details = []
 
     for id_, url in neighbors.items():
-        endpoint = "http://" + url + "/info"
+        endpoint = f"http://{url}:{CATALOG_PORT}/info"
         logger.info("Sending request to " + endpoint)
         r = requests.get(endpoint)
         data = r.json()
@@ -68,7 +66,7 @@ def election(node_id, higher_ids):
     response_codes = []
 
     for id_, url in higher_ids.items():
-        endpoint = "http://" + url + "/election"
+        endpoint = f"http://{url}:{CATALOG_PORT}/election"
         response = requests.post(endpoint, json=data)
         response_codes.append(response.status_code)
 
@@ -81,7 +79,7 @@ def announce(coordinator, neighbors):
     data = {"coordinator": coordinator}
 
     for id_, url in neighbors.items():
-        endpoint = "http://" + url + "/coordinator"
+        endpoint = f"http://{url}:{CATALOG_PORT}/coordinator"
         response = requests.post(endpoint, json=data)
         
         if (response.status_code == 200):

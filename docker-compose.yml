@@ -8,9 +8,11 @@ services:
     environment:
       PROCESS_ID: 123
       ALL_IDS: "123,111"
-      ALL_HOSTNAMES: "catalog_service_1:5002,catalog_service_2:5002"
+      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2"
+      CATALOG_PORT: 5002
     ports:
       - "5001:5002"
+    env_file: config_env
   
   catalog_service_2:
     container_name: catalog_service_2
@@ -19,31 +21,31 @@ services:
     environment:
       PROCESS_ID: 111
       ALL_IDS: "123,111"
-      ALL_HOSTNAMES: "catalog_service_1:5002,catalog_service_2:5002"
+      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2"
+      CATALOG_PORT: 5002
     ports:
       - "5002:5002"
+    env_file: config_env
   
   order_service_1:
+    container_name: order_service_1
     image: order_service_1
     build: 
       context: ./OrderService
       dockerfile: deployments/Dockerfile
-    environment:
-      CATALOG_HOST: "catalog_service_1:5002"
     ports:
       - "5007:5007"
     env_file: config_env
   
   order_service_2:
-  image: order_service_2
-  build: 
-    context: ./OrderService
-    dockerfile: deployments/Dockerfile
-  environment:
-      CATALOG_HOST: "catalog_service_2:5002"
-  ports:
-    - "5007:5007"
-  env_file: config_env
+    container_name: order_service_2
+    image: order_service_2
+    build: 
+      context: ./OrderService
+      dockerfile: deployments/Dockerfile
+    ports:
+      - "5006:5007"
+    env_file: config_env
 
   front_end_service:
     container_name: front_end_service

@@ -14,8 +14,6 @@ import time
 import os
 import requests
 
-
-CATALOG_HOST = os.getenv("CATALOG_HOST")
 CATALOG_PORT = os.getenv("CATALOG_PORT")
 
 FRONTEND_HOST = os.getenv("FRONTEND_HOST")
@@ -106,7 +104,7 @@ def propagateUpdates(update_request):
 
     # Assuming no fault for now so all update requests should succeed
     for neighbor, url in node.neighbors.items():
-        endpoint = "http://" + url + "/update_database"
+        endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
         t = threading.Thread(target=requests.put, args=(
             endpoint,), kwargs={"json": update_request})
         threads.append(t)
@@ -119,6 +117,7 @@ def push_invalidate_cache(id):
     data = {'id': id}
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
+
 class Ping(Resource):
     def get(self):
         response = jsonify({'Response': 'OK'})
