@@ -1,6 +1,7 @@
 from flask import request
 from flask_restful import Resource
 from sys import stdout
+import threading
 
 import logging
 import os
@@ -28,6 +29,10 @@ ORDER_HOST_1 = os.getenv('ORDER_HOST_1')
 ORDER_HOST_2 = os.getenv('ORDER_HOST_2')
 ORDER_PORT = os.getenv('ORDER_PORT')
 
+#locks
+search_lock = threading.Lock()
+lookup_lock = threading.Lock()
+buy_lock = threading.Lock()
 
 # Local caching
 cache = dict()
@@ -64,7 +69,9 @@ class Search(Resource):
             target_key = f'search-{topic_name}'
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
+                search_lock.acquire()
                 Search.search_count+=1
+                search_lock.release()
                 logger.info(f'calling the backend server')
                 if Search.search_count%2==0:
                     response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
@@ -118,7 +125,9 @@ class LookUp(Resource):
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
                 logger.info(f'calling the backend server')
+                lookup_lock.acquire()
                 LookUp.lookup_count+=1
+                lookup_lock.release()
                 if LookUp.lookup_count%2==0:
                     response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
                 else:
@@ -166,6 +175,9 @@ class Buy(Resource):
 
         # requesting to order
         try:
+            buy_lock.acquire()
+            Buy.buy_count+=1
+            buy_lock.release()
             if Buy.buy_count % 2 == 0:
                 response = requests.put(f'http://{ORDER_HOST_1}:{ORDER_PORT}/order', json=data)
             else:
