@@ -18,6 +18,9 @@ import requests
 CATALOG_HOST = os.getenv("CATALOG_HOST")
 CATALOG_PORT = os.getenv("CATALOG_PORT")
 
+FRONTEND_HOST = os.getenv("FRONTEND_HOST")
+FRONTEND_PORT = os.getenv("FRONTEND_PORT")
+
 logger = logging.getLogger("Catalog-Service")
 
 logger.setLevel(logging.INFO)  # set logger level
@@ -112,11 +115,16 @@ def propagateUpdates(update_request):
     for t in threads:
         t.join()
 
+def push_invalidate_cache(id):
+    data = {'id': id}
+    url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
+    requests.post(url, json=data)
 class Ping(Resource):
     def get(self):
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
+
 
 class Query(Resource):
     def get(self):
@@ -167,8 +175,13 @@ class Buy(Resource):
         if (node.node_id == node.coordinator):
             # if we are the primary
             if ("id" in json_request):
+                 # Invalidating the cache before writing to database
+                push_invalidate_cache(json_request['id'])
+
+                # Writing to database
                 # update the stock in our database
                 json_request["buy"] = True
+
                 log_request = update_data(json_request)
 
                 # concurrently update data in other replicas
@@ -194,16 +207,14 @@ class Buy(Resource):
                 return response.json(), 200
             else:
                 return response.json(), 500
-            
-
 class PrimaryUpdate(Resource):
     def put(self):
         '''
         Handle update request sent from primary server
         '''
         json_request = request.get_json()
-        if (json_request and json_request.get("coordinator") == node.coordinator):
-            logger.info("Receive an update request from primary")
+        if (json_request and "id" in json_request):
+            # Writing to database
             json_request["buy"] = False
             log_request = update_data(json_request)
             logger.info("Update data for book %s", log_request)
@@ -231,6 +242,8 @@ class Update(Resource):
         if (node.node_id == node.coordinator):
             # update the database and propagate it to all replicas
             if (json_request and "id" in json_request):
+                # Invalidating the cache before writing to database
+                push_invalidate_cache(json_request['id'])
                 json_request["buy"] = False
                 log_request = update_data(json_request)
 

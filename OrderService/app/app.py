@@ -13,7 +13,8 @@ import threading
 
 
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
-CATALOG_HOST = os.getenv('CATALOG_HOST_1')
+CATALOG_HOST_1 = os.getenv('CATALOG_HOST_1')
+CATALOG_HOST_2 = os.getenv('CATALOG_HOST_2')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
 
 @app.before_first_request
@@ -40,7 +41,7 @@ class LogService(Resource):
         return result
 
 class OrderService(Resource):
-
+    order_count=0
     def put(self):
         '''
         Handle a put request to buy a book
@@ -55,14 +56,19 @@ class OrderService(Resource):
              time_stamp = str(datetime.now())
              cur.execute("INSERT INTO buy_logs (request_id,timestamp) VALUES( ?, ?)",  (id,time_stamp ))
              conn.commit()
-        response = requests.get(f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query", json={"id": id})
+        OrderService.order_count+=1
+        if OrderService.order_count%2 == 0:
+            response = requests.get(f"http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query", json={"id": id})
+        else:
+            response = requests.get(f"http://{CATALOG_HOST_2}:{CATALOG_PORT}/catalog/query", json={"id": id})
+
         response_json = response.json()
         if response.status_code!=200:
             return {'message': "Error in receiving response from catalog service"}, 500
         
         quantity = response_json['stock']
         if quantity > 0:
-            response = requests.put(f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy", json={"id": id})
+            response = requests.put(f"http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/buy", json={"id": id})
             if response.status_code == 200:
                 return response.json(), 200
             else:

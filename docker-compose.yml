@@ -46,6 +46,7 @@ services:
   env_file: config_env
 
   front_end_service:
+    container_name: front_end_service
     image: front_end_service
     build: 
       context: ./FrontendService
