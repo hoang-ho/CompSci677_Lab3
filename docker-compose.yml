@@ -46,7 +46,7 @@ services:
       context: ./OrderService
       dockerfile: deployments/Dockerfile
     environment:
-      CATALOG_HOST: "catalog_service_1"
+      CATALOG_HOST: "catalog_service_2"
       CATALOG_PORT: 5002
     ports:
       - "5006:5007"
