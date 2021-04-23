@@ -18,6 +18,9 @@ import requests
 CATALOG_HOST = os.getenv("CATALOG_HOST")
 CATALOG_PORT = os.getenv("CATALOG_PORT")
 
+FRONTEND_HOST = os.getenv("FRONTEND_HOST")
+FRONTEND_PORT = os.getenv("FRONTEND_PORT")
+
 logger = logging.getLogger("Catalog-Service")
 
 logger.setLevel(logging.INFO)  # set logger level
@@ -97,11 +100,19 @@ def prepopulate():
                     id=book["id"]).update({"stock": book["stock"], "cost": book["cost"]})
             session.commit()
 
+
+def push_invalidate_cache(id):
+    data = {'id': id}
+    url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
+    requests.post(url, json=data)
+
+
 class Ping(Resource):
     def get(self):
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
+
 
 class Query(Resource):
     def get(self):
@@ -161,8 +172,13 @@ class Buy(Resource):
         else:
             # if we are the primary
             if ("id" in json_request):
+                 # Invalidating the cache before writing to database
+                push_invalidate_cache(json_request['id'])
+
+                # Writing to database
                 # update the stock in our database
                 json_request["buy"] = True
+
                 log_request = update_data(json_request)
 
                 # concurrently update data in other replicas
@@ -190,6 +206,7 @@ class Buy(Resource):
                 response.status_code = 400
                 return response
 
+
 class Update(Resource):
     def put(self):
         '''
@@ -200,6 +217,10 @@ class Update(Resource):
         json_request = request.get_json()
 
         if (json_request and "id" in json_request):
+            # Invalidating the cache before writing to database
+            push_invalidate_cache(json_request['id'])
+
+            # Writing to database
             json_request["buy"] = False
             log_request = update_data(json_request)
             logger.info("Update data for book %s", log_request)

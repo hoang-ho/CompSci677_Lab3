@@ -1,3 +1,4 @@
+from flask import request
 from flask_restful import Resource
 from sys import stdout
 
@@ -19,7 +20,8 @@ logger.addHandler(consoleHandler)
 
 
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
-CATALOG_HOST = os.getenv('CATALOG_HOST_1')
+CATALOG_HOST_1 = os.getenv('CATALOG_HOST_1')
+CATALOG_HOST_2 = os.getenv('CATALOG_HOST_2')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
 ORDER_HOST = os.getenv('ORDER_HOST')
 ORDER_PORT = os.getenv('ORDER_PORT')
@@ -57,17 +59,15 @@ class Search(Resource):
         
         # requesting to catalog
         try:
-            logger.info(f'Catalog Host: {CATALOG_HOST}')
-
             target_key = f'search-{topic_name}'
             logger.info(f'target key: {target_key}')
             if target_key not in cache:
                 Search.search_count+=1
                 logger.info(f'calling the backend server')
                 if Search.search_count%2==0:
-                    response = requests.get(f'http://{CATALOG_HOST}_1:{CATALOG_PORT}/catalog/query', json=data)
+                    response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
                 else:
-                    response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+                    response = requests.get(f'http://{CATALOG_HOST_2}:{CATALOG_PORT}/catalog/query', json=data)
 
                 if response.status_code == 200:
                     self.t_end = time.time()
@@ -118,9 +118,9 @@ class LookUp(Resource):
                 logger.info(f'calling the backend server')
                 LookUp.lookup_count+=1
                 if LookUp.lookup_count%2==0:
-                    response = requests.get(f'http://{CATALOG_HOST}_1:{CATALOG_PORT}/catalog/query', json=data)
+                    response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
                 else:
-                    response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+                    response = requests.get(f'http://{CATALOG_HOST_2}:{CATALOG_PORT}/catalog/query', json=data)
                 if response.status_code == 200:
                     self.t_end = time.time()
                     logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
@@ -177,3 +177,29 @@ class Buy(Resource):
             self.t_end = time.time()
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             return {'message': 'something went wrong. Please try again'}, 500
+
+
+class Cache(Resource):
+    '''
+    Endpoint to invalidate cache
+    '''
+
+    def post(self):
+        data = request.json
+        logger.info(f'request data: {data}')
+
+        # If topic name or id of the book has been updated
+        if(data.get('topic_name')):
+            logger.info(f'In id data cache: {cache}')
+            target_key = f'lookup-{data["topic_name"]}'
+            logger.info(f'target key to pop: {target_key}')
+            invalidate = cache.pop(target_key, None)
+
+        # If stock and cost has been updated
+        if(data.get('id')):
+            logger.info(f'In id data cache: {cache}')
+            target_key = f'lookup-{data["id"]}'
+            logger.info(f'target key to pop: {target_key}')
+            invalidate = cache.pop(target_key, None)
+
+        # logger.info(f'Invalidate the entry: {invalidate}')
