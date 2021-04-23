@@ -86,3 +86,5 @@ $ curl --request GET http://localhost:5004/lookup/1
 #### Load-Balancer
 
 #### Database Consistency
+
+For milestone 1 & 2, CatalogService has two replicas: one exposed on port 5001 and the other exposed on port 5002.
