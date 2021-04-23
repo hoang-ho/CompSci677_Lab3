@@ -1,5 +1,6 @@
 # Milestone 1
 **Deliverables:** In this milestone we had to extend the previous programming lab 2 to implement features such as - Caching and it's invalidation, load balancing at the front end server and replication and consistency of the catalog server and the order server.
+
 **Assumption:** As per the documentation, we have implemented an in-memory cache implementation. The cache invalidation is a server side push technique. Also, 2 replicas are implemented for the catalog and the order server.
 
 ## Technical Overview
@@ -19,6 +20,10 @@ A simple round robin algorithm is used to implement the load balancer. The round
 ### Database Replication and Consistency
 
 To maintain consistency across the two different replicas of catalog server, we have implemented a `Primary-Backup` protocal. Moreover, to decide the Primary server we are using the Bully algorithm to elect the primary catalog server.
+
+#### Database Consistency
+
+For milestone 1 & 2, CatalogService has two replicas: one exposed on port 5001 and the other exposed on port 5002.
 
 ## Setting up the environment locally
 
@@ -116,7 +121,3 @@ $ cd CompSci677_Lab3
 ```
 $ bash test_local.sh
 ```
-
-## Database Consistency
-
-For milestone 1 & 2, CatalogService has two replicas: one exposed on port 5001 and the other exposed on port 5002.
