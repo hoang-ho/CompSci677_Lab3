@@ -45,6 +45,13 @@ def BeginElection(node, wait=True):
                 announce(node.node_id, node.neighbors)
 
 def ready_for_election(neighbors):
+    '''
+    Check if we need an election to appoint a new leader
+    Cases when a new leader is needed:
+        If no leader has been appointed
+        If leader dies
+        If a new node just joins the system
+    '''
     coordinator_details = []
 
     for id_, url in neighbors.items():

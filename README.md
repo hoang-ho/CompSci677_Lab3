@@ -21,10 +21,6 @@ A simple round robin algorithm is used to implement the load balancer. The round
 
 To maintain consistency across the two different replicas of catalog server, we have implemented a `Primary-Backup` protocal. Moreover, to decide the Primary server we are using the Bully algorithm to elect the primary catalog server.
 
-#### Database Consistency
-
-For milestone 1 & 2, CatalogService has two replicas: one exposed on port 5001 and the other exposed on port 5002.
-
 ## Setting up the environment locally
 
 Clone the repo and run the following commands:
