@@ -24,6 +24,11 @@ def init_database():
     conn.close()
 
 
+class HealthCheck(Resource):
+    def get(self):
+        return {'message', 'OK'}
+
+
 class LogService(Resource):
     def get(self):
         with sql.connect("database.db") as conn:
@@ -39,6 +44,7 @@ class LogService(Resource):
         else:
             result=json.dumps( {'message': 'Log is empty'})
         return result
+
 
 class OrderService(Resource):
     order_count=0
