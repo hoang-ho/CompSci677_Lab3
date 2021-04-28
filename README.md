@@ -1,7 +1,7 @@
 # Milestone 1
 **Deliverables:** In this milestone we had to extend the previous programming lab 2 to implement features such as - Caching and it's invalidation, load balancing at the front end server and replication and consistency of the catalog server and the order server.
 
-**Assumption:** As per the documentation, we have implemented an in-memory cache implementation. The cache invalidation is a server side push technique. Also, 2 replicas are implemented for the catalog and the order server.
+**Assumption:** As per the documentation, we have implemented an in-memory cache implementation. The cache invalidation is a server side push technique. Also, 2 replicas are implemented for the catalog and the order server. Moreover, the system is built considering no faults will occur!
 
 ## Technical Overview
 
@@ -15,6 +15,8 @@ Also, the front end server has an API endpoint to invalidate the cache. Everytim
 
 ### Load Balancer at Frontend Server
 
+> Note: The order_service_1 will always communicate with catalog_service_1 and order_service_2 will always communicate with catalog_service_2.
+
 A simple round robin algorithm is used to implement the load balancer. The round robin algorithm guarantees that all the servers has the same workload. To gurantee this, alternate requests are sent to different replicas.
 
 ### Database Replication and Consistency
@@ -22,6 +24,39 @@ A simple round robin algorithm is used to implement the load balancer. The round
 To maintain consistency across the two different replicas of catalog server, we have implemented a `Primary-Backup` protocal. Moreover, to decide the Primary server we are using the Bully algorithm to elect the primary catalog server.
 
 ## Setting up the environment locally
+<<<<<<< HEAD
+=======
+
+### Directly Downloading from Docker
+
+Follow the following steps to set up the environment:
+
+1. Create a network for docker containers to communicate:
+```
+docker network create -d bridge my-bridge-network
+```
+
+2. Create individual containers for all the micro services and the replicas as follows:
+> Note: Please have an environment file for every container. The environment file can be download from the ./env folder for each container also.
+
+```
+docker run --env-file <path_to_env_file>/catalog_service_1 -p 5001:5002 --network my-bridge-network --name catalog_service_1 hoangho/catalog_service
+```
+```
+docker run --env-file <path_to_env_file>/catalog_service_2 -p 5002:5002 --network my-bridge-network --name catalog_service_2 hoangho/catalog_service
+```
+```
+docker run --env-file <path_to_env_file>/order_service_1 -p 5007:5007 --network my-bridge-network --name order_service_1 hoangho/order_service
+```
+```
+docker run --env-file <path_to_env_file>/order_service_2 -p 5006:5007 --network my-bridge-network --name order_service_2 hoangho/order_service
+```
+```
+docker run --env-file <path_to_env_file>/front_end_service -p 5004:5004 --network my-bridge-network --name front_end_service hoangho/front_end_service
+```
+
+### Running from the GitHub Repository
+>>>>>>> 3dd2f27f150cb342d782247614a2708b2962403b
 
 Clone the repo and run the following commands:
 
@@ -109,11 +144,10 @@ $ curl --request GET http://localhost:5004/lookup/1
 
 ## Test Scripts for Testing Locally
 
-> NOTE: Please don't update the `./config_env` file on the client machine to run the tests locally.
+> NOTE: If setting and running from the GitHub Repository please don't update the `./config_env` file on the client machine to run the tests locally.
+
+> NOTE: If setting and running by pulling images directly from the Dockerhub Repositry please make sure that all the containers are running.
 
 ```
-$ cd CompSci677_Lab3
-```
-```
-$ bash test_local.sh
+$ bash <path_to_file>/test_local.sh
 ```

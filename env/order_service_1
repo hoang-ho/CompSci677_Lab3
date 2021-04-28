@@ -1,0 +1,2 @@
+CATALOG_HOST=catalog_service_1
+CATALOG_PORT=5002
