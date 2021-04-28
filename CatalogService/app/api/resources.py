@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from database.database_setup import Base, Book
 from ConsistencyProtocol.BullyAlgorithm import Node, BeginElection
-from utils import synchronized
+from utils import synchronized, log_write_request, log_read_request
 from sys import stdout
 import logging
 import threading
@@ -41,47 +41,54 @@ lock = threading.Lock()
 
 
 @synchronized
-def log_request(newData, key):
+def update_data(update_request):
     '''
-    Write requests to a logfile in case the the database or the app goes down. We can reconstruct from this log file
+    update_request: a request of type json that contains id to query book by id and update/buy the book
+    This is a synchronized function
     '''
-    fd = open('logfile.json', "r+")
+    # update the current database as well as the base_database log
+    book = session.query(Book).filter_by(id=update_request["book_id"]).one()
+    fd = open('base_database.json', "r+")
     data = json.loads(fd.read())
-    data[key].append(newData)
+    key = "book_id_%s" % str(update_request["book_id"])
+    
+    if (update_request["request_type"] == "buy"):
+        book.stock -= 1
+        data[key]["stock"] -= 1
+    elif (update_request["request_type"] == "update"):
+        if (update_data.get("stock", None)):
+            book.stock = update_request["stock"]
+            data[key]["stock"] = update_request["stock"]
+        
+        if (update_data.get("cost", None)):
+            book.cost = update_request["cost"]
+            data[key]["cost"] = update_request["cost"]
+
     fd.seek(0)
     json.dump(data, fd)
     fd.truncate()
     fd.close()
 
+    return book.title
+
 
 @synchronized
-def update_data(json_request):
-    '''
-    json_request: a request of type json that contains id to query book by id and update/buy the book
-    This is a synchronized function
-    '''
-    book = session.query(Book).filter_by(id=json_request["id"]).one()
+def handle_write_request(write_request):
+    # Write to log
+    log_write_request(write_request)
+    # propagate update to other replicas
+    write_request["coordinator"] = node.node_id
+    propagateUpdates(write_request)
 
-    if ("stock" in json_request):
-        book.stock = json_request["stock"]
-
-    if ("cost" in json_request):
-        book.cost = json_request["cost"]
-
-    if (json_request["buy"]):
-        book.stock -= 1
-
-    logRequest = {"id": book.id, "title": book.title, "stock": book.stock,
-                  "cost": book.cost, "timestamp": time.time()}
-    log_request(logRequest, "update")
-
-    return logRequest
+    # execute the update
+    title = update_data(write_request)
+    return title
 
 
 def prepopulate():
     logger.info("Prepopulate data")
     if (session.query(Book).first() is None):
-        f = open('logfile.json', "r")
+        f = open('base_database.json', "r")
         data = json.loads(f.read())
 
         # add all the book
@@ -90,24 +97,14 @@ def prepopulate():
                 title=book["title"], topic=book["topic"], stock=book["stock"], cost=book["cost"]))
         session.commit()
 
-        # update according to timestamp
-        if (data["update"]):
-            update = sorted(data["update"], key=lambda k: k["timestamp"])
-            for book in update:
-                session.query(Book).filter_by(
-                    id=book["id"]).update({"stock": book["stock"], "cost": book["cost"]})
-            session.commit()
-
-
 def propagateUpdates(update_request):
     threads = list()
 
-    # Assuming no fault for now so all update requests should succeed
     for neighbor, url in node.neighbors.items():
         endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
         logger.info("Propagate updates to endpoint %s", endpoint)
         t = threading.Thread(target=requests.put, args=(
-            endpoint,), kwargs={"json": update_request})
+            endpoint,), kwargs={"json": update_request, "timeout": 3.05})
         threads.append(t)
         t.start()
 
@@ -119,12 +116,11 @@ def push_invalidate_cache(id):
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
 
-class Ping(Resource):
+class HealthCheck(Resource):
     def get(self):
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
-
 
 class Query(Resource):
     def get(self):
@@ -142,27 +138,23 @@ class Query(Resource):
                     response = jsonify(success=False)
                     response.status_code = 400
                 else:
-                    logRequest = {
-                        "id": request_data["id"], "timestamp": time.time()}
-                    log_request(logRequest, "query")
+                    request_data["time_stamp"] = time.time()
+                    log_read_request(request_data)
                     response = jsonify(books[0].serializeQueryById)
                     response.status_code = 200
 
             elif ("topic" in request_data):
                 books = session.query(Book).filter_by(
                     topic=request_data["topic"]).all()
-                logRequest = {
-                    "topic": request_data["topic"], "timestamp": time.time()}
-                log_request(logRequest, "query")
-                response = jsonify(
-                    items={book.title: book.id for book in books})
+                request_data["time_stamp"] = time.time()
+                log_read_request(request_data)
+                response = jsonify(items={book.title: book.id for book in books})
                 response.status_code = 200
         else:
             response = jsonify(success=False)
             response.status_code = 400
 
         return response
-
 
 class Buy(Resource):
     def put(self):
@@ -178,20 +170,11 @@ class Buy(Resource):
                 # Invalidating the cache before writing to database
                 push_invalidate_cache(json_request['id'])
 
-                # Writing to database
-                # update the stock in our database
-                json_request["buy"] = True
-
-                log_request = update_data(json_request)
-
-                # concurrently update data in other replicas
-                update_request = {"coordinator": node.node_id,
-                                  "id": log_request["id"], "stock": log_request["stock"]}
-                propagateUpdates(update_request)
-
+                json_request["request_type"] = "buy"
+                title = handle_write_request(json_request)
                 # send back a response
-                logger.info("Update data %s", log_request)
-                response = jsonify(book=log_request["title"])
+                logger.info("Update data %s", title)
+                response = jsonify(book=title)
                 response.status_code = 200
                 return response
             else:
@@ -209,6 +192,7 @@ class Buy(Resource):
                 return response.json(), 200
             else:
                 return response.json(), 500
+
 class PrimaryUpdate(Resource):
     def put(self):
         '''
@@ -221,13 +205,13 @@ class PrimaryUpdate(Resource):
             response.status_code = 400
             return response
 
-        if (json_request and "id" in json_request):
+        if (json_request and "book_id" in json_request):
             # Writing to database
             json_request["buy"] = False
-            log_request = update_data(json_request)
-            logger.info("Update data for book %s", log_request)
-            json_response = {"message": "Done update",
-                            "book": log_request["title"]}
+            log_write_request(json_request)
+            title = update_data(json_request)
+            logger.info("Update data for book %s", title)
+            json_response = {"message": "Done update", "book": title}
             response = jsonify(json_response)
             response.status_code = 200
             return response
@@ -253,16 +237,11 @@ class Update(Resource):
                 # Invalidating the cache before writing to database
                 push_invalidate_cache(json_request['id'])
 
-                json_request["buy"] = False
-                log_request = update_data(json_request)
+                json_request["request_type"] = "update"
+                title = handle_write_request(json_request)
 
-                # concurrently update data in other replicas
-                update_request = {"coordinator": node.node_id,
-                                    "id": log_request["id"], "stock": log_request["stock"], "cost": log_request["cost"]}
-                propagateUpdates(update_request)
-
-                logger.info("Update data for book %s", log_request)
-                json_response = {"message": "Done update", "book": log_request["title"]}
+                logger.info("Update data for book %s", title)
+                json_response = {"message": "Done update", "book": title}
                 response = jsonify(json_response)
                 response.status_code = 200
                 return response
@@ -282,6 +261,13 @@ class Update(Resource):
                 return response.json(), 200
             else:
                 return response.json(), 500
+
+class SyncDatabase(Resource):
+    def get(self):
+        books = session.query(Book).all()
+        response = jsonify(Books = [book.serializeAll for book in books])
+        response.status_code = 200
+        return response
 
 class NodeInfo(Resource):
     def get(self):

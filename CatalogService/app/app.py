@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_restful import Api
-from api.resources import Ping, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, node, prepopulate, logger
+from api.resources import HealthCheck, HeartBeat, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, node, prepopulate, logger
 from ConsistencyProtocol.BullyAlgorithm import BeginElection
 import threading
 import os
@@ -37,7 +37,7 @@ class CatalogServiceFlask(Flask):
 
 app = CatalogServiceFlask(__name__)
 api = Api(app)
-api.add_resource(Ping, "/healthcheck")
+api.add_resource(HealthCheck, "/healthcheck")
 api.add_resource(Query, "/catalog/query")
 api.add_resource(Buy, "/catalog/buy")
 api.add_resource(Update, "/catalog/update")
@@ -45,10 +45,14 @@ api.add_resource(PrimaryUpdate, "/update_database")
 api.add_resource(NodeInfo, "/info")
 api.add_resource(Election, "/election")
 api.add_resource(Coordinator, "/coordinator")
+api.add_resource(SyncDatabase, "/sync_database")
 
 
 @app.before_first_request
 def activate_election():
+    t1 = threading.Thread(target=SyncDatabase, args=(node,))
+    t1.start()
+    t1.join()
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
 

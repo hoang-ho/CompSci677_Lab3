@@ -1,5 +1,5 @@
 import threading
-
+import json
 
 def synchronized(func):
     '''
@@ -13,3 +13,23 @@ def synchronized(func):
             return func(*args, **kws)
 
     return synced_func
+
+@synchronized
+def log_write_request(log_request):
+    fd = open('write_requests.json', "r+")
+    data = json.loads(fd.read())
+    data.append(log_request)
+    fd.seek(0)
+    json.dump(data, fd)
+    fd.truncate()
+    fd.close()
+
+@synchronized
+def log_read_request(log_request):
+    fd = open('read_requests.json', "r+")
+    data = json.loads(fd.read())
+    data.append(log_request)
+    fd.seek(0)
+    json.dump(data, fd)
+    fd.truncate()
+    fd.close()

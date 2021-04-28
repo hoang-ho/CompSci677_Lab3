@@ -24,8 +24,6 @@ A simple round robin algorithm is used to implement the load balancer. The round
 To maintain consistency across the two different replicas of catalog server, we have implemented a `Primary-Backup` protocal. Moreover, to decide the Primary server we are using the Bully algorithm to elect the primary catalog server.
 
 ## Setting up the environment locally
-<<<<<<< HEAD
-=======
 
 ### Directly Downloading from Docker
 
@@ -56,7 +54,6 @@ docker run --env-file <path_to_env_file>/front_end_service -p 5004:5004 --networ
 ```
 
 ### Running from the GitHub Repository
->>>>>>> 3dd2f27f150cb342d782247614a2708b2962403b
 
 Clone the repo and run the following commands:
 
