@@ -236,7 +236,7 @@ class Buy(Resource):
             try:
                 heatbeat_resp = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/healthcheck')
                 if heatbeat_resp.status_code == 200:
-                    response = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/catalog/query', json=data)
+                    response = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
             except:
                 logger.info(f'server not available at {ORDER_HOST}')
             else:
