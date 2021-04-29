@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_restful import Api
 from api.resources import HealthCheck, HeartBeat, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, node, prepopulate, logger
-from ConsistencyProtocol.BullyAlgorithm import BeginElection
+from ConsistencyProtocol.PrimaryBackup import BeginElection, SyncDatabase
 import threading
 import os
 import time
@@ -30,7 +30,6 @@ class CatalogServiceFlask(Flask):
     def run(self, host=None, port=None, debug=None, load_dotenv=True, **options):
       if not self.debug or os.getenv('WERKZEUG_RUN_MAIN') == 'true':
         with self.app_context():
-          prepopulate()
           start_runner()
       super(CatalogServiceFlask, self).run(host=host, port=port,
                                           debug=debug, load_dotenv=load_dotenv, **options)    
@@ -53,6 +52,9 @@ def activate_election():
     t1 = threading.Thread(target=SyncDatabase, args=(node,))
     t1.start()
     t1.join()
+    t2 = threading.Thread(target = prepopulate)
+    t2.start()
+    t2.join
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
 
