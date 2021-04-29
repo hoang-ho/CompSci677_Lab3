@@ -173,7 +173,7 @@ class Buy(Resource):
         '''
         logger.info("Receive a buy request")
         json_request = request.get_json()
-
+        query_id=json_request['request_id']
         if (node.node_id == node.coordinator):
             # if we are the primary
             if ("id" in json_request):

@@ -220,14 +220,14 @@ class Buy(Resource):
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             return {"message": "Please enter a correct id"}, 400  
 
-        data = {"id": id}
+        data = {"id": id,'request_id':'Na'}
 
         # requesting to order
         try:
             buy_lock.acquire()
             Buy.buy_count+=1
+            data['request_id']=Buy.buy_count
             buy_lock.release()
-
             order_host_index = Buy.buy_count % 2
             ORDER_HOSTS_AVAILABLE = ORDER_HOSTS[:order_host_index] + ORDER_HOSTS[order_host_index+1:]               
 
