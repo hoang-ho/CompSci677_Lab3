@@ -49,12 +49,6 @@ api.add_resource(SyncDatabase, "/sync_database")
 
 @app.before_first_request
 def activate_election():
-    t1 = threading.Thread(target=SyncDatabase, args=(node,))
-    t1.start()
-    t1.join()
-    t2 = threading.Thread(target = prepopulate)
-    t2.start()
-    t2.join
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
 

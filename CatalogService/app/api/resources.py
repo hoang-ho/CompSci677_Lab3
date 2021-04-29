@@ -100,7 +100,7 @@ def prepopulate():
 def propagateUpdates(update_request):
     threads = list()
 
-    for neighbor, url in node.neighbors.items():
+    for neighbor, url in node.alive_neighbors.items():
         endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
         logger.info("Propagate updates to endpoint %s", endpoint)
         t = threading.Thread(target=requests.put, args=(
@@ -166,9 +166,9 @@ class Buy(Resource):
 
         if (node.node_id == node.coordinator):
             # if we are the primary
-            if ("id" in json_request):
+            if ("book_id" in json_request):
                 # Invalidating the cache before writing to database
-                push_invalidate_cache(json_request['id'])
+                push_invalidate_cache(json_request['book_id'])
 
                 json_request["request_type"] = "buy"
                 title = handle_write_request(json_request)
@@ -233,9 +233,9 @@ class Update(Resource):
         # if we are the coordinator
         if (node.node_id == node.coordinator):
             # update the database and propagate it to all replicas
-            if (json_request and "id" in json_request):
+            if (json_request and "book_id" in json_request):
                 # Invalidating the cache before writing to database
-                push_invalidate_cache(json_request['id'])
+                push_invalidate_cache(json_request['book_id'])
 
                 json_request["request_type"] = "update"
                 title = handle_write_request(json_request)
@@ -272,7 +272,7 @@ class SyncDatabase(Resource):
 class NodeInfo(Resource):
     def get(self):
         response = jsonify(
-            {"node_id": node.node_id, "coordinator": node.coordinator})
+            {"node_id": node.node_id, "coordinator": node.coordinator, "neighbors": node.alive_neighbors})
         response.status_code = 200
         return response
 
