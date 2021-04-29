@@ -22,7 +22,7 @@ class Node:
         self.node_id = int(os.getenv("PROCESS_ID"))
         all_ids = [int(val) for val in os.getenv("ALL_IDS").split(",")]
         all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
-        self.neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids)) if all_ids[i] != self.node_id}
+        self.neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
         self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
         self.coordinator = coordinator
     
@@ -89,6 +89,8 @@ class Node:
                 response_json = response.json()
                 self.alive_neighbors = response_json.get("neighbors")
                 return False
+            else:
+                self.alive_neighbors.pop(self.coordinator)
         
         # if we don't have the leader appointed,
         # then we either haven't received the announcement
@@ -104,10 +106,11 @@ class Node:
             executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
             responses = []
             for id_, url in self.alive_neighbors.items():
-                endpoint = f"http://{url}:{CATALOG_PORT}/info"
-                logger.info("Sending request to node at " + endpoint)
-                r = executors.submit(requests.get, endpoint, timeout=3.05)
-                responses.append((r, id_))
+                if (id_ != self.node_id):
+                    endpoint = f"http://{url}:{CATALOG_PORT}/info"
+                    logger.info("Sending request to node at " + endpoint)
+                    r = executors.submit(requests.get, endpoint, timeout=3.05)
+                    responses.append((r, id_))
             
             for r, id_ in responses:
                 if r.result.status_code != 200:
@@ -121,10 +124,11 @@ class Node:
         executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
         responses = []
         for id_, url in self.alive_neighbors.items():
-            endpoint = f"http://{url}:{CATALOG_PORT}/info"
-            logger.info("Sending request to node at " + endpoint)
-            r = executors.submit(requests.get, endpoint, timeout=3.05)
-            responses.append((r, id_))
+            if (id_ != self.node_id):
+                endpoint = f"http://{url}:{CATALOG_PORT}/info"
+                logger.info("Sending request to node at " + endpoint)
+                r = executors.submit(requests.get, endpoint, timeout=3.05)
+                responses.append((r, id_))
         
         for r, id_ in responses:
             if r.result.status_code == 200:
@@ -160,11 +164,10 @@ def BeginElection(node, wait=True):
                     # This node becomes the leader
                     node.announce(node.neighbors)
 
-        # sleep for 2 seconds before checking again!
-        time.sleep(3)
-        # for leader to check if everyone is alive
+        # for primary to check if everyone is alive
         node.primary_ping()
-
+        # sleep for 3 seconds before checking again!
+        time.sleep(4)
 
 def sync_data(node):
     '''

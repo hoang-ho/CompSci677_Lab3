@@ -101,12 +101,13 @@ def propagateUpdates(update_request):
     threads = list()
 
     for neighbor, url in node.alive_neighbors.items():
-        endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
-        logger.info("Propagate updates to endpoint %s", endpoint)
-        t = threading.Thread(target=requests.put, args=(
-            endpoint,), kwargs={"json": update_request, "timeout": 3.05})
-        threads.append(t)
-        t.start()
+        if (neighbor != node.node_id):
+            endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
+            logger.info("Propagate updates to endpoint %s", endpoint)
+            t = threading.Thread(target=requests.put, args=(
+                endpoint,), kwargs={"json": update_request, "timeout": 3.05})
+            threads.append(t)
+            t.start()
 
     for t in threads:
         t.join()
