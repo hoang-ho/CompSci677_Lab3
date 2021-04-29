@@ -23,7 +23,9 @@ class Node:
         all_ids = [int(val) for val in os.getenv("ALL_IDS").split(",")]
         all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
         self.neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
-        self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
+        self.url = self.neighbors[self.node_id]
+        # self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
+        self.alive_neighbors = {self.node_id: self.url}
         self.coordinator = coordinator
     
     def election(self, higher_ids):
@@ -58,11 +60,14 @@ class Node:
             endpoint = f"http://{url}:{CATALOG_PORT}/coordinator"
             try:
                 response = requests.post(endpoint, json=data, timeout=3.05)
+            except requests.Timeout:
+                response = None
 
             if (response and response.status_code == 200):
                 logger.info("Done notifying node %d" % id_)
             else:
                 logger.info("Could not notify node %d" % id_)
+
      
     def ready_for_election(self):
         '''
@@ -113,61 +118,101 @@ class Node:
                     responses.append((r, id_))
             
             for r, id_ in responses:
-                if r.result.status_code != 200:
+                if r.result().status_code != 200:
                     self.alive_neighbors.pop(id_)
     
+    # def check_in_network(self):
+    #     '''
+    #     This is to check if the node is in the system
+    #     If it is not in the system, it need to sync with everyone first before joining the system
+    #     '''
+    #     executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
+    #     responses = []
+        
+    #     for id_, url in self.neighbors.items():
+    #         if (id_ != self.node_id):
+    #             endpoint = f"http://{url}:{CATALOG_PORT}/info"
+    #             logger.info("Sending request to node at " + endpoint)
+    #             r = executors.submit(requests.get, endpoint, timeout=3.05)
+    #             responses.append((r, id_))
+        
+    #     for r, id_ in responses:
+    #         if r.result().status_code == 200:
+    #             response_json = r.result().json()
+    #             if (self.node_id not in response_json.get("neighbors")):
+    #                 return False
+        
+    #     return True
+
+
+    # Assuming states: starting - node is starting initially or starting after recovering from crash
+    #                  ready - it's synced with db; ready to receive requests
+                    #  running - it's in the system; executing requests
+
     def check_in_network(self):
         '''
-        This is to check if the node is in the system
-        If it is not in the system, it need to sync with everyone first before joining the system
+        This checks is performed by a node that is in starting state - 
+        to get a list of all the other alive nodes in the systems
         '''
         executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
         responses = []
-        for id_, url in self.alive_neighbors.items():
+        
+        for id_, url in self.neighbors.items():
             if (id_ != self.node_id):
-                endpoint = f"http://{url}:{CATALOG_PORT}/info"
+                endpoint = f"http://{url}:{CATALOG_PORT}/healthcheck"
                 logger.info("Sending request to node at " + endpoint)
                 r = executors.submit(requests.get, endpoint, timeout=3.05)
                 responses.append((r, id_))
         
         for r, id_ in responses:
-            if r.result.status_code == 200:
-                response_json = r.json()
-                if (self.node_id not in response_json.get("neighbors")):
-                    return False
-        
+            if r.result().status_code == 200:
+                self.alive_neighbors.add(id_, self.neighbors[id_])
+                # response_json = r.result().json()
+                # if (self.node_id not in response_json.get("neighbors")):
+                #     return False
+
         return True
         
 
 def BeginElection(node, wait=True):
-    while node.check_in_network():
-        # For recovery
-        # First check if you are in everyone else network
-        # How to know that? Ask everyone if you're their alive neighbors        
 
-        # check if we have a leader and the leader is alive
-        election_ready = node.ready_for_election(node.neighbors)
-        logger.info("Election ready? " + str(election_ready))
+    node.check_in_network()
+
+    if len(self.alive_neighbors) == 1:
+        # This means that there is only one node and they are the leader
+        # We will have to annouce that the node is a coordinator
+
+    else:
+        # Handle new node entering the system scenario
+
+    # while node.check_in_network():
+    #     # For recovery
+    #     # First check if you are in everyone else network
+    #     # How to know that? Ask everyone if you're their alive neighbors        
+
+    #     # check if we have a leader and the leader is alive
+    #     election_ready = node.ready_for_election(node.alive_neighbors)
+    #     logger.info("Election ready? " + str(election_ready))
         
-        if election_ready:
-            logger.info('Starting election in: %s' % node.node_id)
-            higher_ids = {id_:url for id_, url in node.neighbors.items() if id_ > node.node_id}
+    #     if election_ready:
+    #         logger.info('Starting election in: %s' % node.node_id)
+    #         higher_ids = {id_:url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
             
-            # we are the node with the highest id, announce ourselves as the coordinator
-            if (len(higher_ids) == 0):
-                logger.info("Announcing Coordinator as %d " % node.node_id)
-                node.announce(node.neighbors)
-            else: 
-                # Send election message to node with higher id
-                if node.election(higher_ids) == False:
-                    # If none of the node with higher id is alive
-                    # This node becomes the leader
-                    node.announce(node.neighbors)
+    #         # we are the node with the highest id, announce ourselves as the coordinator
+    #         if (len(higher_ids) == 0):
+    #             logger.info("Announcing Coordinator as %d " % node.node_id)
+    #             node.announce(node.alive_neighbors)
+    #         else: 
+    #             # Send election message to node with higher id
+    #             if node.election(higher_ids) == False:
+    #                 # If none of the node with higher id is alive
+    #                 # This node becomes the leader
+    #                 node.announce(node.alive_neighbors)
 
-        # for primary to check if everyone is alive
-        node.primary_ping()
-        # sleep for 3 seconds before checking again!
-        time.sleep(4)
+    #     # for primary to check if everyone is alive
+    #     node.primary_ping()
+    #     # sleep for 3 seconds before checking again!
+    #     time.sleep(4)
 
 def sync_data(node):
     '''

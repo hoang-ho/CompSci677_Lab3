@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_restful import Api
-from api.resources import HealthCheck, HeartBeat, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, node, prepopulate, logger
-from ConsistencyProtocol.PrimaryBackup import BeginElection, SyncDatabase
+from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, node, prepopulate, logger
+from ConsistencyProtocol.PrimaryBackup import BeginElection
 import threading
 import os
 import time
@@ -13,7 +13,7 @@ def start_runner():
         while not_started:
             logger.info('In start loop')
             try:
-                r = requests.get('http://127.0.0.1:5002/')
+                r = requests.get('http://127.0.0.1:5002/healthcheck')
                 if r.status_code == 200:
                     logger.info('Server started, quiting start_loop')
                     not_started = False
