@@ -29,6 +29,10 @@ ORDER_HOST_1 = os.getenv('ORDER_HOST_1')
 ORDER_HOST_2 = os.getenv('ORDER_HOST_2')
 ORDER_PORT = os.getenv('ORDER_PORT')
 
+# List of available Catalog Hosts and Order Hosts 
+CATALOG_HOSTS = [CATALOG_HOST_1, CATALOG_HOST_2]
+ORDER_HOSTS = [ORDER_HOST_1, ORDER_HOST_2]
+
 #locks
 search_lock = threading.Lock()
 lookup_lock = threading.Lock()
@@ -36,6 +40,31 @@ buy_lock = threading.Lock()
 
 # Local caching
 cache = dict()
+
+def choose_host(AVAILABLE_HOSTS, PORT, data, url):
+    for HOST in AVAILABLE_HOSTS:
+        logger.info(f'Trying HOST........ {HOST} at PORT........... {PORT}')
+        try:
+            heartbeat_resp = requests.get(f'http://{HOST}:{PORT}/healthcheck')
+            if heartbeat_resp.status_code == 200:
+                response = requests.get(f'http://{HOST}:{PORT}{url}', json=data)
+            if response.status_code == 200:
+                return response
+        except:
+            logger.info(f'server not available at {HOST}')
+
+
+def choose_host_for_buy(AVAILABLE_HOSTS, PORT, data, url):
+    for HOST in AVAILABLE_HOSTS:
+        logger.info(f'Trying HOST........ {HOST} at PORT........... {PORT}')
+        try:
+            heartbeat_resp = requests.get(f'http://{HOST}:{PORT}/healthcheck')
+            if heartbeat_resp.status_code == 200:
+                response = requests.put(f'http://{HOST}:{PORT}{url}', json=data)
+            if response.status_code == 200:
+                return response
+        except:
+            logger.info(f'server not available at {HOST}')
 
 
 class Search(Resource):
@@ -45,6 +74,7 @@ class Search(Resource):
     search_count=0
     t_start = time.time()
     t_end = 0
+
     def get(self, topic_name=None):
         # return the expected value
         if not topic_name:
@@ -67,30 +97,45 @@ class Search(Resource):
         # requesting to catalog
         try:
             target_key = f'search-{topic_name}'
-            logger.info(f'target key: {target_key}')
+
             if target_key not in cache:
+                response = ''
                 search_lock.acquire()
                 Search.search_count+=1
                 search_lock.release()
-                logger.info(f'calling the backend server')
-                if Search.search_count%2==0:
-                    response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
-                else:
-                    response = requests.get(f'http://{CATALOG_HOST_2}:{CATALOG_PORT}/catalog/query', json=data)
 
-                if response.status_code == 200:
+                catalog_host_index = Search.search_count%2
+                CATALOG_HOSTS_AVAILABLE = CATALOG_HOSTS[:catalog_host_index] + CATALOG_HOSTS[catalog_host_index+1:]               
+
+                CATALOG_HOST = CATALOG_HOSTS[catalog_host_index]
+
+                try:
+                    heartbeat_resp = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/healthcheck')
+                    logger.info(f'Heartbeat check: {heartbeat_resp}')
+                    if heartbeat_resp.status_code == 200:
+                        response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+                except:
+                    logger.info(f'server not available at {CATALOG_HOST}')
+                else:
+                    self.t_end = time.time()
+                    logger.info(f'execution time for search: {self.t_end-self.t_start}')
+                    cache[target_key] = response.json()
+
+                if not cache.get(target_key, None):
+                    url = '/catalog/query'
+                    response = choose_host(CATALOG_HOSTS_AVAILABLE, CATALOG_PORT, data, url)
                     self.t_end = time.time()
                     logger.info(f'execution time for search: {self.t_end-self.t_start}')
                     cache[target_key] = response.json()
             
             cached_response = cache[target_key]
-            logger.info(f'returning cached response')
+
             self.t_end = time.time()
             logger.info(f'execution time for search: {self.t_end-self.t_start}')
-            return cached_response, 200
+            return cached_response
         except:
             self.t_end = time.time()
-            logger.info(f'execution time for search: {self.t_end-self.t_start}')
+            logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
             return {'message': 'something went wrong. Please try again'}, 500
 
 
@@ -101,6 +146,7 @@ class LookUp(Resource):
     lookup_count = 0
     t_start = time.time()
     t_end = 0
+
     def get(self, item_id=None):
         # return the expected value
         if not item_id:
@@ -122,26 +168,42 @@ class LookUp(Resource):
         # requesting to catalog
         try:
             target_key = f'lookup-{item_id}'
-            logger.info(f'target key: {target_key}')
+
             if target_key not in cache:
-                logger.info(f'calling the backend server')
                 lookup_lock.acquire()
                 LookUp.lookup_count+=1
                 lookup_lock.release()
-                if LookUp.lookup_count%2==0:
-                    response = requests.get(f'http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query', json=data)
+
+                catalog_host_index = LookUp.lookup_count%2
+                CATALOG_HOSTS_AVAILABLE = CATALOG_HOSTS[:catalog_host_index] + CATALOG_HOSTS[catalog_host_index+1:]               
+
+                CATALOG_HOST = CATALOG_HOSTS[catalog_host_index]
+
+                try:
+                    heartbeat_resp = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/healthcheck')
+                    logger.info(f'Heart beat: {heartbeat_resp}')
+                    if heartbeat_resp.status_code == 200:
+                        response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
+                except:
+                    logger.info(f'server not available at {CATALOG_HOST}')
                 else:
-                    response = requests.get(f'http://{CATALOG_HOST_2}:{CATALOG_PORT}/catalog/query', json=data)
-                if response.status_code == 200:
+                    if response.status_code == 200:
+                        self.t_end = time.time()
+                        logger.info(f'execution time for search: {self.t_end-self.t_start}')
+                        cache[target_key] = response.json()
+
+                if not cache.get(target_key, None):
+                    url = '/catalog/query'
+                    response = choose_host(CATALOG_HOSTS_AVAILABLE, CATALOG_PORT, data, url)
                     self.t_end = time.time()
                     logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
                     cache[target_key] = response.json()
 
             cached_response = cache[target_key]
-            logger.info(f'returning cached response')
+
             self.t_end = time.time()
             logger.info(f'execution time for search: {self.t_end-self.t_start}')
-            return cached_response, 200
+            return cached_response
         except:
             self.t_end = time.time()
             logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
@@ -155,6 +217,7 @@ class Buy(Resource):
     buy_count=0
     t_start = time.time()
     t_end = 0
+
     def post(self, item_id=None):
         # return the expected value
         if not item_id:
@@ -178,22 +241,40 @@ class Buy(Resource):
             buy_lock.acquire()
             Buy.buy_count+=1
             buy_lock.release()
-            if Buy.buy_count % 2 == 0:
-                response = requests.put(f'http://{ORDER_HOST_1}:{ORDER_PORT}/order', json=data)
-            else:
-                response = requests.put(f'http://{ORDER_HOST_2}:{ORDER_PORT}/order', json=data)
 
-            if response.status_code == 200:
-                self.t_end = time.time()
-                logger.info(f'execution time for buy: {self.t_end-self.t_start}')
-                response_json = response.json()
-                book = response_json.get('book', '')
-                if(book):
-                    return {'message': f'successfully purchased the book {book}'}
-                return response.json()
-        except:
+            order_host_index = Buy.buy_count % 2
+            ORDER_HOSTS_AVAILABLE = ORDER_HOSTS[:order_host_index] + ORDER_HOSTS[order_host_index+1:]               
+
+            ORDER_HOST = ORDER_HOSTS[order_host_index]
+
+            try:
+                heatbeat_resp = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/healthcheck')
+                if heatbeat_resp.status_code == 200:
+                    response = requests.put(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
+            except:
+                logger.info(f'server not available at {ORDER_HOST}')
+            else:
+                if response.status_code == 200:
+                    self.t_end = time.time()
+                    logger.info(f'execution time for search: {self.t_end-self.t_start}')
+                    response_json = response.json()
+                    book = response_json.get('book', '')
+                    if(book):
+                        return {'message': f'successfully purchased the book {book}'}
+                    return response.json()
+
+            url = '/order'
+            response = choose_host_for_buy(ORDER_HOSTS_AVAILABLE, ORDER_PORT, data, url)
             self.t_end = time.time()
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
+            response_json = response.json()
+            book = response_json.get('book', '')
+            if(book):
+                return {'message': f'successfully purchased the book {book}'}
+            return response.json()
+        except:
+            self.t_end = time.time()
+            logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
             return {'message': 'something went wrong. Please try again'}, 500
 
 

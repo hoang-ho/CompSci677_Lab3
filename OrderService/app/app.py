@@ -24,6 +24,13 @@ def init_database():
     conn.close()
 
 
+class HealthCheck(Resource):
+    def get(self):
+        response = jsonify({'message': 'OK'})
+        response.status_code = 200
+        return response
+
+
 class LogService(Resource):
     def get(self):
         with sql.connect("database.db") as conn:
@@ -39,6 +46,7 @@ class LogService(Resource):
         else:
             result=json.dumps( {'message': 'Log is empty'})
         return result
+
 
 class OrderService(Resource):
     order_count=0
@@ -84,6 +92,7 @@ class OrderService(Resource):
 
 api.add_resource(OrderService, "/order")
 api.add_resource(LogService, "/log")
+api.add_resource(HealthCheck, "/healthcheck")
 
 
 if __name__ == '__main__':
