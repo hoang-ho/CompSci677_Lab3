@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from database.database_setup import Base, Book
-from ConsistencyProtocol.BullyAlgorithm import Node, BeginElection
+from ConsistencyProtocol.PrimaryBackup import Node, BeginElection
 from utils import synchronized, log_write_request, log_read_request
 from sys import stdout
 import logging
