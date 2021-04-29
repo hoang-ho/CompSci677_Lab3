@@ -53,6 +53,20 @@ def choose_host(AVAILABLE_HOSTS, PORT, data, url):
         except:
             logger.info(f'server not available at {HOST}')
 
+
+def choose_host_for_buy(AVAILABLE_HOSTS, PORT, data, url):
+    for HOST in AVAILABLE_HOSTS:
+        logger.info(f'Trying HOST........ {HOST} at PORT........... {PORT}')
+        try:
+            heartbeat_resp = requests.get(f'http://{HOST}:{PORT}/healthcheck')
+            if heartbeat_resp.status_code == 200:
+                response = requests.put(f'http://{HOST}:{PORT}{url}', json=data)
+            if response.status_code == 200:
+                return response
+        except:
+            logger.info(f'server not available at {HOST}')
+
+
 class Search(Resource):
     '''
     Handle search by topic request
@@ -236,7 +250,7 @@ class Buy(Resource):
             try:
                 heatbeat_resp = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/healthcheck')
                 if heatbeat_resp.status_code == 200:
-                    response = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
+                    response = requests.put(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
             except:
                 logger.info(f'server not available at {ORDER_HOST}')
             else:
@@ -250,7 +264,7 @@ class Buy(Resource):
                     return response.json()
 
             url = '/order'
-            response = choose_host(ORDER_HOSTS_AVAILABLE, ORDER_PORT, data, url)
+            response = choose_host_for_buy(ORDER_HOSTS_AVAILABLE, ORDER_PORT, data, url)
             self.t_end = time.time()
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             response_json = response.json()

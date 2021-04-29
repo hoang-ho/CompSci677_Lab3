@@ -26,7 +26,9 @@ def init_database():
 
 class HealthCheck(Resource):
     def get(self):
-        return {'message', 'OK'}
+        response = jsonify({'message': 'OK'})
+        response.status_code = 200
+        return response
 
 
 class LogService(Resource):
@@ -90,6 +92,7 @@ class OrderService(Resource):
 
 api.add_resource(OrderService, "/order")
 api.add_resource(LogService, "/log")
+api.add_resource(HealthCheck, "/healthcheck")
 
 
 if __name__ == '__main__':
