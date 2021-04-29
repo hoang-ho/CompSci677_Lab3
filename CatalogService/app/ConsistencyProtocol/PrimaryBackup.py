@@ -136,7 +136,7 @@ class Node:
         
 
 def BeginElection(node, wait=True):
-    while node.check_in_network:
+    while node.check_in_network():
         # For recovery
         # First check if you are in everyone else network
         # How to know that? Ask everyone if you're their alive neighbors        
