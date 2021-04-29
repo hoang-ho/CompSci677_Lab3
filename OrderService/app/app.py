@@ -20,7 +20,7 @@ CATALOG_PORT = os.getenv('CATALOG_PORT')
 @app.before_first_request
 def init_database():
     conn = sql.connect('database.db')
-    conn.execute('CREATE TABLE IF NOT EXISTS buy_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL, timestamp TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS buy_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL, timestamp TEXT NOT NULL,query_id TEXT NOT NULL)')
     conn.close()
 
 
@@ -40,7 +40,7 @@ class LogService(Resource):
             rows = cur.fetchall()
             row_list=[]
             for row in rows:
-                row_list.append({'id':row['id'],'request_id':row['request_id'],'timestamp':row['timestamp']})
+                row_list.append({'id':row['id'],'request_id':row['request_id'],'timestamp':row['timestamp'],'query_id':row['query_id']})
         if rows:
             result=json.dumps(row_list)
         else:
@@ -56,13 +56,14 @@ class OrderService(Resource):
         '''
         request_data = request.get_json()
         id= request_data['id']
+        query_id=request_data['request_id']
         if not id:
             return json.dumps({'message':"Invalid request"})
 
         with sql.connect("database.db") as conn:
              cur = conn.cursor()
              time_stamp = str(datetime.now())
-             cur.execute("INSERT INTO buy_logs (request_id,timestamp) VALUES( ?, ?)",  (id,time_stamp ))
+             cur.execute("INSERT INTO buy_logs (request_id,timestamp,query_id) VALUES( ?, ?,?)",  (id,time_stamp,query_id ))
              conn.commit()
         # OrderService.order_count+=1
         # if OrderService.order_count%2 == 0:
@@ -80,7 +81,7 @@ class OrderService(Resource):
         quantity = response_json['stock']
         if quantity > 0:
             response = requests.put(
-                f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy", json={"id": id})
+                f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy", json={"id": id, 'request_id':query_id})
             if response.status_code == 200:
                 return response.json(), 200
             else:

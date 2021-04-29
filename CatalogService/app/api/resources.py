@@ -168,7 +168,11 @@ class Buy(Resource):
         '''
         logger.info("Receive a buy request")
         json_request = request.get_json()
-
+        query_id=json_request['request_id']
+        fd = open('write_requests.json', "r+")
+        data = json.loads(fd.read())
+        if "request_id_" + str(query_id) in data:
+            return
         if (node.node_id == node.coordinator):
             # if we are the primary
             if ("book_id" in json_request):
