@@ -112,17 +112,20 @@ def propagateUpdates(update_request):
     for t in threads:
         t.join()
 
+
 def push_invalidate_cache(id):
     data = {'id': id}
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
 
+    
 class HealthCheck(Resource):
     def get(self):
-        response = jsonify({'Response': 'OK'})
+        response = jsonify({'message': 'OK'})
         response.status_code = 200
         return response
 
+      
 class Query(Resource):
     def get(self):
         '''
@@ -157,6 +160,7 @@ class Query(Resource):
 
         return response
 
+      
 class Buy(Resource):
     def put(self):
         '''
@@ -194,6 +198,7 @@ class Buy(Resource):
             else:
                 return response.json(), 500
 
+              
 class PrimaryUpdate(Resource):
     def put(self):
         '''
@@ -221,6 +226,7 @@ class PrimaryUpdate(Resource):
             response = jsonify(json_response)
             response.status_code = 400
             return response
+
 
 class Update(Resource):
     def put(self):
@@ -263,6 +269,7 @@ class Update(Resource):
             else:
                 return response.json(), 500
 
+
 class SyncDatabase(Resource):
     def get(self):
         books = session.query(Book).all()
@@ -270,12 +277,14 @@ class SyncDatabase(Resource):
         response.status_code = 200
         return response
 
+
 class NodeInfo(Resource):
     def get(self):
         response = jsonify(
             {"node_id": node.node_id, "coordinator": node.coordinator, "neighbors": node.alive_neighbors})
         response.status_code = 200
         return response
+
 
 class Election(Resource):
     counter = 0
@@ -291,6 +300,7 @@ class Election(Resource):
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
+
 
 class Coordinator(Resource):
     def post(self):

@@ -36,6 +36,7 @@ class CatalogServiceFlask(Flask):
 
 app = CatalogServiceFlask(__name__)
 api = Api(app)
+
 api.add_resource(HealthCheck, "/healthcheck")
 api.add_resource(Query, "/catalog/query")
 api.add_resource(Buy, "/catalog/buy")
