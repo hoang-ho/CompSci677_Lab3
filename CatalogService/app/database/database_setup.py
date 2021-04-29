@@ -38,6 +38,16 @@ class Book(Base):
             "stock": self.stock,
             "cost": self.cost,
         }
+    
+    @property
+    def serializeAll(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "topic": self.topic,
+            "stock": self.stock,
+            "cost": self.cost
+        }
 
 # creates a create_engine instance at the bottom of the file
 engine = create_engine('sqlite:///books-collection.db')
