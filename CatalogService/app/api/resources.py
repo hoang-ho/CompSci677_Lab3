@@ -74,6 +74,7 @@ def handle_write_request(write_request):
     node.lock.acquire()
     # Write to log
     log_write_request(write_request)
+
     # propagate update to other replicas
     write_request["coordinator"] = node.node_id
     propagateUpdates(write_request)
@@ -91,10 +92,11 @@ def prepopulate():
         data = json.loads(f.read())
 
         # add all the book
-        for book in data["add"]:
+        for key,book in data.items():
             session.add(Book(
-                title=book["title"], topic=book["topic"], stock=book["stock"], cost=book["cost"]))
+                id=book['id'], title=book["title"], topic=book["topic"], stock=book["stock"], cost=book["cost"]))
         session.commit()
+
 
 def propagateUpdates(update_request):
     threads = list()
@@ -117,6 +119,7 @@ def push_invalidate_cache(id):
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
 
+
 def push_data():
     node.lock.acquire()
     books = session.query(Book).all()
@@ -125,6 +128,7 @@ def push_data():
     node.announce(json_data)
     node.lock.release()
     
+
 class HealthCheck(Resource):
     def get(self):
         response = jsonify({'message': 'OK'})
@@ -279,6 +283,8 @@ class Update(Resource):
                 return response.json(), 200
             else:
                 return response.json(), 500
+
+
 class NodeInfo(Resource):
     def get(self):
         response = jsonify(
@@ -303,7 +309,10 @@ class Election(Resource):
             if (len(higher_ids) > 0):
                 threading.Thread(target=node.election).start()
             else:
-                threading.Thread(target=node.announce).start()
+                # if data['node_id'] not in node.alive_neighbors:
+                #     node_id = data['node_id']
+                #     node.alive_neighbors.add(node_id, node.neighbors[node_id])                   
+                threading.Thread(target=push_data).start()
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
@@ -327,6 +336,7 @@ class Coordinator(Resource):
         response.status_code = 200
         return response
 
+
 # class NodeJoin(Resource):
 #     def post(self):
 #         '''
@@ -349,6 +359,7 @@ class Coordinator(Resource):
 #         response = jsonify({'Response': 'OK'})
 #         response.status_code = 200
 #         return response
+
 
 # class SyncDatabase(Resource):
 #     def post(self):

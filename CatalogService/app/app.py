@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_restful import Api
-from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, NodeJoin, node, prepopulate, logger
+from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, node, prepopulate, logger
 from ConsistencyProtocol.PrimaryBackup import BeginElection
 import threading
 import os
@@ -30,7 +30,8 @@ class CatalogServiceFlask(Flask):
     def run(self, host=None, port=None, debug=None, load_dotenv=True, **options):
       if not self.debug or os.getenv('WERKZEUG_RUN_MAIN') == 'true':
         with self.app_context():
-          start_runner()
+            prepopulate()
+            start_runner()
       super(CatalogServiceFlask, self).run(host=host, port=port,
                                           debug=debug, load_dotenv=load_dotenv, **options)    
 
@@ -45,8 +46,8 @@ api.add_resource(PrimaryUpdate, "/update_database")
 api.add_resource(NodeInfo, "/info")
 api.add_resource(Election, "/election")
 api.add_resource(Coordinator, "/coordinator")
-api.add_resource(SyncDatabase, "/sync_database")
-api.add_resource(NodeJoin, "/request_to_sync")
+# api.add_resource(SyncDatabase, "/sync_database")
+# api.add_resource(NodeJoin, "/request_to_sync")
 
 
 @app.before_first_request

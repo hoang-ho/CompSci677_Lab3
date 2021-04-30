@@ -13,6 +13,7 @@ CATALOG_PORT = os.getenv("CATALOG_PORT")
 logger = logging.getLogger("Catalog-Service")
 
 class Node:
+
     def __init__(self, coordinator=-1):
         '''
         node_id: id of the node
@@ -28,7 +29,7 @@ class Node:
         # self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
         self.alive_neighbors = {self.node_id: self.url}
         self.coordinator = coordinator
-        self.lock = threading.lock()        
+        self.lock = threading.Lock()        
     
     def election(self):
         '''
@@ -53,7 +54,7 @@ class Node:
         else:
             return False
     
-    def announce(self, data):
+    def announce(self, data={}):
         '''
         To send COORDINATOR message to node with lower ids
         '''
@@ -61,7 +62,9 @@ class Node:
         data["coordinator"] = self.node_id
         # data = {"coordinator": self.node_id}
 
-        for id_, url in self.alive_neighbors.items():
+        logger.info(f'++++++++++++++++++++ data sending in annouce: {data}')
+
+        for id_, url in self.neighbors.items():
             endpoint = f"http://{url}:{CATALOG_PORT}/coordinator"
             try:
                 response = requests.post(endpoint, json=data, timeout=3.05)
@@ -99,7 +102,6 @@ class Node:
             # If leader dies, we return True to begin a new election
             return True
 
-     
     def ready_for_election(self):
         '''
         This is for a STARTING node to check if it can begin an election
@@ -152,7 +154,6 @@ class Node:
                 if r.result().status_code != 200:
                     self.alive_neighbors.pop(id_)
     
-
     def get_alive_neighbors(self):
         '''
         This checks is performed by a node that is in starting state - 
@@ -182,6 +183,8 @@ def BeginElection(node, wait=True):
 
     # get all alive neighbors
     node.get_alive_neighbors()
+
+    logger.info(f'============= len of alive neighbors: {len(node.alive_neighbors)}')
 
     if len(node.alive_neighbors) == 1:
         # This means that there is only one node and they are the leader

@@ -55,23 +55,18 @@ class OrderService(Resource):
         Handle a put request to buy a book
         '''
         request_data = request.get_json()
-        id= request_data['id']
-        query_id=request_data['request_id']
-        if not id:
+        book_id = request_data['book_id']
+        request_id = request_data['request_id']
+        if not book_id:
             return json.dumps({'message':"Invalid request"})
 
         with sql.connect("database.db") as conn:
              cur = conn.cursor()
              time_stamp = str(datetime.now())
-             cur.execute("INSERT INTO buy_logs (request_id,timestamp,query_id) VALUES( ?, ?,?)",  (id,time_stamp,query_id ))
+             cur.execute("INSERT INTO buy_logs (request_id, timestamp, query_id) VALUES( ?, ?,?)",  (request_id, time_stamp, book_id ))
              conn.commit()
-        # OrderService.order_count+=1
-        # if OrderService.order_count%2 == 0:
-        #     response = requests.get(f"http://{CATALOG_HOST_1}:{CATALOG_PORT}/catalog/query", json={"id": id})
-        # else:
-        #     response = requests.get(f"http://{CATALOG_HOST_2}:{CATALOG_PORT}/catalog/query", json={"id": id})
-        response = requests.get(
-            f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query", json={"id": id})
+
+        response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json={'id': book_id})
 
 
         response_json = response.json()
@@ -80,8 +75,7 @@ class OrderService(Resource):
         
         quantity = response_json['stock']
         if quantity > 0:
-            response = requests.put(
-                f"http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy", json={"id": id, 'request_id':query_id})
+            response = requests.put(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy', json={'book_id': book_id, 'request_id':request_id})
             if response.status_code == 200:
                 return response.json(), 200
             else:
