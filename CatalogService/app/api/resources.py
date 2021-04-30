@@ -195,8 +195,14 @@ class Buy(Resource):
         query_id=json_request['request_id']
         fd = open('write_requests.json', "r+")
         data = json.loads(fd.read())
-        if "request_id_" + str(query_id) in data:
-            return
+        target_key = "request_id_" + str(query_id)
+        if target_key in data:
+            logger.info('======== in target key')
+            book_id = json_request['book_id']
+            book = session.query(Book).filter_by(id=book_id).one()
+            response = jsonify(book=book.title)
+            response.status_code = 200
+            return response
         if (node.node_id == node.coordinator):
             # if we are the primary
             if ("book_id" in json_request):
