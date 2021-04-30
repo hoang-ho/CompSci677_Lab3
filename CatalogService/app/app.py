@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_restful import Api
-from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, node, prepopulate, logger
+from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, node, prepopulate, logger
 from ConsistencyProtocol.PrimaryBackup import BeginElection
 import threading
 import os
@@ -46,7 +46,7 @@ api.add_resource(PrimaryUpdate, "/update_database")
 api.add_resource(NodeInfo, "/info")
 api.add_resource(Election, "/election")
 api.add_resource(Coordinator, "/coordinator")
-# api.add_resource(SyncDatabase, "/sync_database")
+api.add_resource(SyncDatabase, "/sync_database")
 # api.add_resource(NodeJoin, "/request_to_sync")
 
 
