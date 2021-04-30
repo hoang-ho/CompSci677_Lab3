@@ -53,3 +53,4 @@ class Book(Base):
 engine = create_engine('sqlite:///books-collection.db')
 
 Base.metadata.create_all(engine)
+
