@@ -25,7 +25,7 @@ class Node:
         all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
         self.neighbors = {all_ids[i]: all_urls[i] for i in range(
             len(all_ids)) if all_ids[i] != self.node_id}
-        self.state = "STARTING"
+        # self.state = "STARTING"
         # self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
         # self.alive_neighbors = {self.node_id: self.url}
         self.alive_neighbors = {}
@@ -82,6 +82,10 @@ class Node:
         If the leader dies, we begin a new election by return True
         '''
         # For those in the RUNNING system (with an appointed leader) to check if their leader is still alive
+        if (self.coordinator == -1):
+            # Wait a bit for the coordinator endpoint to return
+            return
+
         url = self.neighbors[self.coordinator]
         endpoint = f"http://{url}:{CATALOG_PORT}/info"
         logger.info("Sending request to coordinator at " + endpoint)
@@ -212,11 +216,10 @@ def BeginElection(node, wait=True):
         # Handle new node entering the system scenario
         node.ready_for_election()
         
-        # if there is already a running system, we wait
-        while(True):
-            if (node.coordinator == node.node_id):
-                node.ping_backups()
-            else:
-                node.ping_primary()
-            
-            time.sleep(3)
+    # if there is already a running system, we wait
+    while(True):
+        if (node.coordinator == node.node_id):
+            node.ping_backups()
+        else:
+            node.ping_primary()
+        time.sleep(3)

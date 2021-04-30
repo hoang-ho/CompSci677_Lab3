@@ -288,7 +288,7 @@ class Update(Resource):
 class NodeInfo(Resource):
     def get(self):
         response = jsonify(
-            {"node_id": node.node_id, "coordinator": node.coordinator, "states": node.state, "neighbors": node.alive_neighbors})
+            {"node_id": node.node_id, "coordinator": node.coordinator, "neighbors": node.alive_neighbors})
         response.status_code = 200
         return response
 
@@ -313,7 +313,9 @@ class Election(Resource):
                 # if data['node_id'] not in node.alive_neighbors:
                 #     node_id = data['node_id']
                 #     node.alive_neighbors.add(node_id, node.neighbors[node_id])                   
-                threading.Thread(target=push_data).start()
+                t = threading.Thread(target=push_data)
+                t.start()
+                t.join()
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
