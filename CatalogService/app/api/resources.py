@@ -100,7 +100,7 @@ def prepopulate():
 
 def propagateUpdates(update_request):
     threads = list()
-
+    logger.info(f"Propagate updates to other replicas {node.alive_neighbors}")
     for neighbor, url in node.alive_neighbors.items():
         if (neighbor != node.node_id):
             endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
@@ -174,8 +174,9 @@ class Buy(Resource):
         '''
         For a buy request, forward the request to the primary replica
         '''
-        logger.info("Receive a buy request")
+
         json_request = request.get_json()
+        logger.info("Receive a buy request %s" % str(json_request["request_id"]))
         query_id=json_request['request_id']
         fd = open('write_requests.json', "r+")
         data = json.loads(fd.read())
@@ -304,6 +305,7 @@ class Election(Resource):
 
         data = request.get_json()
         node.alive_neighbors[data["node_id"]] = node.neighbors[data["node_id"]]
+        logger.info(f"All our alive neighbors {node.alive_neighbors}")
         if (Election.counter == 1 and data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
             higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
