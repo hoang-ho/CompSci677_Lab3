@@ -53,12 +53,13 @@ class Node:
         else:
             return False
     
-    def announce(self):
+    def announce(self, data):
         '''
         To send COORDINATOR message to node with lower ids
         '''
         self.coordinator = self.node_id
-        data = {"coordinator": self.node_id}
+        data["coordinator"] = self.node_id
+        # data = {"coordinator": self.node_id}
 
         for id_, url in self.alive_neighbors.items():
             endpoint = f"http://{url}:{CATALOG_PORT}/coordinator"
@@ -72,7 +73,7 @@ class Node:
             else:
                 logger.info("Could not notify node %d" % id_)
     
-    def ping_leader(self):
+    def ping_primary(self):
         '''
         For the backup to ping the leader to check if the leader is alive
         If the leader dies, we begin a new election by return True
@@ -106,64 +107,32 @@ class Node:
             - If there is already a RUNNING system, then this returns False so the STARTING node need to wait to join
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
-        # # For those in the RUNNING system to check if their leader is still alive
-        # if (self.coordinator != -1 and self.node_id != self.coordinator):
-        #     url = self.neighbors[self.coordinator]
-        #     endpoint = f"http://{url}:{CATALOG_PORT}/info"
-        #     logger.info("Sending request to coordinator at " + endpoint)
-
-        #     try:
-        #         response = requests.get(endpoint, timeout=3.05)
-        #     except requests.Timeout:
-        #         response = None
-
-        #     # if our coordinator is alive
-        #     if (response and response.status_code == 200):
-        #         # update our alive neighbors
-        #         response_json = response.json()
-        #         self.alive_neighbors = response_json.get("neighbors")
-        #         return False
-        #     else:
-        #         self.alive_neighbors.pop(self.coordinator)
-        #         # If leader dies, we return True to begin a new election
-        #         return True
-        
-        # if we are the new STARTING node joining the RUNNING system
-        # If all alive nodes are in state RUNNING
-        # Inform the current primary of the RUNNING system that we want to join
-        running_states = []
         executors = concurrent.futures.ThreadPoolExecutor(
             max_workers=len(list(self.alive_neighbors.keys())))
-        responses = []
+        # responses = []
+        response = ()
+        
         for id_, url in self.alive_neighbors.items():
             if (id_ != self.node_id):
-                endpoint = f"http://{url}:{CATALOG_PORT}/healthcheck"
+                endpoint = f"http://{url}:{CATALOG_PORT}/info"
                 logger.info("Sending request to node at " + endpoint)
                 r = executors.submit(requests.get, endpoint, timeout=3.05)
-                responses.append((r, id_))
+                response = (r, id_)
+                break
         
-        for r, id_ in responses:
-            # we assume no failure during recovery process
-            if r.result().status_code != 200:
-                running_states.append(r.result().get("state"))
+        coordinator = response[0].result()["coordinator"]
         
-        # check if everyone is in state RUNNING
-        if ("RUNNING" in running_states):
-            # get the coordinator and ask for permission to join
-            coordinator = responses[0].result().get("coordinator")
+        # compare ID with the leader
+        if (self.node_id > coordinator):
+            # sync database and announce leadership
             url = self.alive_neighbors[coordinator]
-            endpoint = f"http://{url}:{CATALOG_PORT}/request_to_sync"
-            data = {"node_id": self.node_id, "url": self.url}
-            # this must succeed as we assume no failure during recovery process and no transmission failures
-            response = requests.post(endpoint, json=data)
-
-            # wait until we get to sync database
-
-            # return False 
-        
-        # If no leader has been appointed, every node has its coordinator value set to -1
-        # this actually never happens because we start the container sequentially! 
-        # return True
+            endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
+            logger.info("Sending request to coordinator at " + endpoint)
+        else:
+            # sync database
+            url = self.alive_neighbors[coordinator]
+            endpoint = f"http://{url}:{CATALOG_PORT}/election"
+            response = requests.post(endpoint, timeout=3.05)
     
     def ping_backups(self):
         '''
@@ -220,36 +189,13 @@ def BeginElection(node, wait=True):
         node.announce()
     else:
         # Handle new node entering the system scenario
-        if (node.ready_for_election()):
-            pass
+        node.ready_for_election()
             
-            # if there is already a running system, we wait
+        # if there is already a running system, we wait
+        while(True):
+            if (node.coordinator == node.node_id):
+                node.ping_backups()
+            else:
+                node.ping_primary()
             
-    # while node.check_in_network():
-    #     # For recovery
-    #     # First check if you are in everyone else network
-    #     # How to know that? Ask everyone if you're their alive neighbors        
-
-    #     # check if we have a leader and the leader is alive
-    #     election_ready = node.ready_for_election(node.alive_neighbors)
-    #     logger.info("Election ready? " + str(election_ready))
-        
-    #     if election_ready:
-    #         logger.info('Starting election in: %s' % node.node_id)
-    #         higher_ids = {id_:url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
-            
-    #         # we are the node with the highest id, announce ourselves as the coordinator
-    #         if (len(higher_ids) == 0):
-    #             logger.info("Announcing Coordinator as %d " % node.node_id)
-    #             node.announce(node.alive_neighbors)
-    #         else: 
-    #             # Send election message to node with higher id
-    #             if node.election(higher_ids) == False:
-    #                 # If none of the node with higher id is alive
-    #                 # This node becomes the leader
-    #                 node.announce(node.alive_neighbors)
-
-    #     # for primary to check if everyone is alive
-    #     node.primary_ping()
-    #     # sleep for 3 seconds before checking again!
-    #     time.sleep(4)
+            time.sleep(3)

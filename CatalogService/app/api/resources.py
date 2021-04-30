@@ -117,6 +117,13 @@ def push_invalidate_cache(id):
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
 
+def push_data():
+    node.lock.acquire()
+    books = session.query(Book).all()
+    json_data = {"book_id_" + book.id:book.serializeAll for book in books}
+    node.lock.acquire()
+    node.announce(json_data)
+    node.lock.release()
     
 class HealthCheck(Resource):
     def get(self):
@@ -288,7 +295,11 @@ class Election(Resource):
         data = request.get_json()
         if (Election.counter == 1 and data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
-            # threading.Thread(target=BeginElection, args=(node, False)).start()
+            higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
+            if (len(higher_ids) > 0):
+                threading.Thread(target=node.election).start()
+            else:
+                threading.Thread(target=node.announce).start()
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
@@ -298,54 +309,64 @@ class Coordinator(Resource):
     def post(self):
         data = request.get_json()
         node.coordinator = data["coordinator"]
+
+        for serverBook in data["Books"]:
+            myBook = session.query(Book).filter_by(serverBook["id"]).one()
+            if (myBook.cost != serverBook["cost"]):
+                myBook.cost = serverBook["cost"]
+
+            if (myBook.stock != serverBook["stock"]):
+                myBook.stock = serverBook["stock"]
+
         logger.info("Setting Coordinator as %d in node %d" % (node.coordinator, node.node_id))
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
 
-class NodeJoin(Resource):
-    def post(self):
-        '''
-        Add the join request to the queue
-        Response Ok
-        '''
-        # add the node to queue to join the system
-        data = request.get_json()
-        node.lock.acquire()
-        ## open up a connection with the new node to sync database
-        books = session.query(Book).all()
-        json_data = {"Books": [book.serializeAll for book in books]}
-        ## using requests.post()
-        url = data["url"]
-        endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
-        response = requests.post(endpoint, json=json_data)
+# class NodeJoin(Resource):
+#     def post(self):
+#         '''
+#         Add the join request to the queue
+#         Response Ok
+#         '''
+#         # add the node to queue to join the system
+#         data = request.get_json()
+#         node.lock.acquire()
+#         ## open up a connection with the new node to sync database
+#         books = session.query(Book).all()
+#         json_data = {"Books": [book.serializeAll for book in books]}
+#         ## using requests.post()
+#         url = data["url"]
+#         endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
+#         response = requests.post(endpoint, json=json_data)
 
 
-        node.lock.release()
-        response = jsonify({'Response': 'OK'})
-        response.status_code = 200
-        return response
+#         node.lock.release()
+#         response = jsonify({'Response': 'OK'})
+#         response.status_code = 200
+#         return response
 
-class SyncDatabase(Resource):
-    def post(self):
-        # Sync the database
-        json_request = request.get_json()
-        for serverBook in json_request["Books"]:
-            myBook = session.query(Book).filter_by(serverBook["id"]).one()
-            if (myBook.cost != serverBook["cost"]):
-                myBook.cost = serverBook["cost"]
+# class SyncDatabase(Resource):
+#     def post(self):
+#         # Sync the database
+#         json_request = request.get_json()
+#         for serverBook in json_request["Books"]:
+#             myBook = session.query(Book).filter_by(serverBook["id"]).one()
+#             if (myBook.cost != serverBook["cost"]):
+#                 myBook.cost = serverBook["cost"]
             
-            if (myBook.stock != serverBook["stock"]):
-                myBook.stock = serverBook["stock"]
+#             if (myBook.stock != serverBook["stock"]):
+#                 myBook.stock = serverBook["stock"]
         
-        # initialize the election
-        higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
-        if (len(higher_ids) == 0):
-            # announce
-            node.state = "RUNNING"
-            node.announce()
-        else:
-            node.election()
-        response = jsonify({'Response': 'OK'})
-        response.status_code = 200
-        return response
+#         # initialize the election
+#         higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
+#         if (len(higher_ids) == 0):
+#             # announce
+#             node.state = "RUNNING"
+#             node.announce()
+#         else:
+#             node.election()
+#         response = jsonify({'Response': 'OK'})
+#         response.status_code = 200
+#         return response
+

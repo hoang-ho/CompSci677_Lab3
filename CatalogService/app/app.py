@@ -49,6 +49,7 @@ api.add_resource(SyncDatabase, "/sync_database")
 api.add_resource(NodeJoin, "/request_to_sync")
 
 
+@app.before_first_request
 def activate_election():
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
