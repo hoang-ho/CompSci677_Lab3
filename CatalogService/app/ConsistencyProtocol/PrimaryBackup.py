@@ -94,7 +94,7 @@ class Node:
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
         executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
-        
+        logger.info(f"Our alive neighbors {self.alive_neighbors}")
         for id_, url in self.alive_neighbors.items():
             if (id_ != self.node_id):
                 endpoint = f"http://{url}:{CATALOG_PORT}/info"
@@ -128,6 +128,7 @@ class Node:
                     myBook.stock = serverBook["stock"]
             self.lock.release()
             # initialize the election
+            logger.info(f"Our alive neighbors {self.alive_neighbors}")
             higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if id_ > self.node_id}
             if (len(higher_ids) == 0):
                 self.announce()
@@ -161,6 +162,7 @@ class Node:
             logger.info(f'in get_alive_neighbors: {r}')
             if r.result() is not None:
                 self.alive_neighbors[int(id_)] = self.neighbors[int(id_)]
+        logger.info(f"Our alive neighbors {self.alive_neighbors}")
     
     def ping_backups(self):
         '''
@@ -211,10 +213,12 @@ class Node:
                 response_json = response.json()
                 for id_, url in response_json.get("neighbors").items():
                     self.alive_neighbors[int(id_)] = url
+                logger.info(f"Our alive neighbors {self.alive_neighbors}")
                 return False
             else:
                 logger.info(f'------------ in ping primary response coord crashed: {response}')
-                self.alive_neighbors.pop(self.coordinator)
+                logger.info(f"Our alive neighbors {self.alive_neighbors}")
+                self.alive_neighbors.pop(self.coordinator, None)
                 # logger.info(f'------------ available neighbors: {self.alive_neighbors}')
                 # self.coordinator = -1
                 # self.re_election()
