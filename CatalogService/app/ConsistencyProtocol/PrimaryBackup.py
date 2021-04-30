@@ -211,7 +211,7 @@ def BeginElection(node, wait=True):
     else:
         # Handle new node entering the system scenario
         node.ready_for_election()
-            
+        
         # if there is already a running system, we wait
         while(True):
             if (node.coordinator == node.node_id):

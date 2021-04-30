@@ -303,6 +303,7 @@ class Election(Resource):
         Election.lock.release()
 
         data = request.get_json()
+        node.alive_neighbors[data["node_id"]] = node.neighbors[data["node_id"]]
         if (Election.counter == 1 and data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
             higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
@@ -321,7 +322,8 @@ class Election(Resource):
 class Coordinator(Resource):
     def post(self):
         '''
-        Receive the data the primary
+        Receive the data the current primary
+        Sync the data
         '''
         data = request.get_json()
         node.coordinator = data["coordinator"]
