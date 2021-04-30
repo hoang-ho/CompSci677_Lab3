@@ -7,6 +7,7 @@ import os
 import time
 import requests
 
+
 def start_runner():
     def start_loop():
         not_started = True
@@ -26,6 +27,7 @@ def start_runner():
     thread = threading.Thread(target=start_loop)
     thread.start()
 
+
 class CatalogServiceFlask(Flask):
     def run(self, host=None, port=None, debug=None, load_dotenv=True, **options):
       if not self.debug or os.getenv('WERKZEUG_RUN_MAIN') == 'true':
@@ -35,9 +37,13 @@ class CatalogServiceFlask(Flask):
       super(CatalogServiceFlask, self).run(host=host, port=port,
                                           debug=debug, load_dotenv=load_dotenv, **options)    
 
+
 app = CatalogServiceFlask(__name__)
 api = Api(app)
 
+'''
+API Endpoints available at Catalog Server
+'''
 api.add_resource(HealthCheck, "/healthcheck")
 api.add_resource(Query, "/catalog/query")
 api.add_resource(Buy, "/catalog/buy")
@@ -47,13 +53,13 @@ api.add_resource(NodeInfo, "/info")
 api.add_resource(Election, "/election")
 api.add_resource(Coordinator, "/coordinator")
 api.add_resource(SyncDatabase, "/sync_database")
-# api.add_resource(NodeJoin, "/request_to_sync")
 
 
 @app.before_first_request
 def activate_election():
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
+
 
 if __name__ == "__main__":
     # run the application

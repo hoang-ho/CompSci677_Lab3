@@ -12,11 +12,8 @@ from sqlalchemy.orm import relationship
 
 # for configuration
 from sqlalchemy import create_engine
-
-# from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-# from database.database_setup import Base, Book
 
 # create declarative_base instance
 Base = declarative_base()

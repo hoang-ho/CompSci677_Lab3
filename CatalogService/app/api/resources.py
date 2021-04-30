@@ -1,8 +1,5 @@
 from flask import request, jsonify
 from flask_restful import Api, Resource
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from database.database_setup import Base, Book, session
 from ConsistencyProtocol.PrimaryBackup import Node, BeginElection
 from utils import synchronized, log_write_request, log_read_request
@@ -28,14 +25,6 @@ consoleHandler = logging.StreamHandler(stdout)  # set streamhandler to stdout
 consoleHandler.setFormatter(logFormatter)
 logger.addHandler(consoleHandler)
 
-# Connect to Database and create database session
-# engine = create_engine('sqlite:///books-collection.db',
-#                        echo=True, connect_args={'check_same_thread': False})
-
-# Base.metadata.bind = engine
-
-# DBSession = sessionmaker(bind=engine)
-# session = DBSession()
 node = Node()
 
 @synchronized
@@ -99,7 +88,9 @@ def handle_write_request(write_request):
 
 
 def prepopulate():
-    logger.info("Prepopulate data")
+    '''
+    Initialzing the database with the data
+    '''
     if (session.query(Book).first() is None):
         f = open('base_database.json', "r")
         data = json.loads(f.read())
@@ -112,30 +103,36 @@ def prepopulate():
 
 
 def propagateUpdates(update_request):
+    '''
+    This function sends the write updates to all the running replicas in the system
+    '''
     threads = list()
     logger.info(f"Propagate updates to other replicas {node.alive_neighbors}")
     for neighbor, url in node.alive_neighbors.items():
         if (int(neighbor) != node.node_id):
             endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
-            logger.info("Propagate updates to endpoint %s", endpoint)
             t = threading.Thread(target=wrapper_put_request,
                                  args=(endpoint, update_request))
-            # t = threading.Thread(target=requests.put, args=(
-            #     endpoint,), kwargs={"json": update_request, "timeout": 3.05})
             threads.append(t)
             t.start()
-
+    
     for t in threads:
         t.join()
 
 
 def push_invalidate_cache(id):
+    '''
+    A server-push technique to invalidate the cache in front-end before writing to database
+    '''
     data = {'id': id}
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
 
 
 def push_data():
+    '''
+    A helper function to sync database between joining replica and primary
+    '''
     node.lock.acquire()
     books = session.query(Book).all()
     json_data = {"Books": [book.serializeAll for book in books]}
@@ -145,6 +142,9 @@ def push_data():
 
 
 class HealthCheck(Resource):
+    '''
+    Endpoint to check if the node is running
+    '''
     def get(self):
         response = jsonify({'message': 'OK'})
         response.status_code = 200
@@ -158,7 +158,6 @@ class Query(Resource):
         '''
         books = []
         request_data = request.get_json()
-        logger.info("Receive a query request ")
         if (request_data and ("id" in request_data or "topic" in request_data)):
             if ("id" in request_data):
                 books = session.query(Book).filter_by(id=request_data["id"]).all()
@@ -189,30 +188,32 @@ class Buy(Resource):
         '''
         For a buy request, forward the request to the primary replica
         '''
-
         json_request = request.get_json()
-        logger.info("Receive a buy request %s" % str(json_request["request_id"]))
+
+        # Checks if the operation is already performed in case of a crash
         query_id=json_request['request_id']
         fd = open('write_requests.json', "r+")
         data = json.loads(fd.read())
         target_key = "request_id_" + str(query_id)
         if target_key in data:
-            logger.info('======== in target key')
             book_id = json_request['book_id']
             book = session.query(Book).filter_by(id=book_id).one()
             response = jsonify(book=book.title)
             response.status_code = 200
             return response
+
+        # Buy request execution
         if (node.node_id == node.coordinator):
             # if we are the primary
             if ("book_id" in json_request):
+
                 # Invalidating the cache before writing to database
                 push_invalidate_cache(json_request['book_id'])
 
                 json_request["request_type"] = "buy"
                 title = handle_write_request(json_request)
+
                 # send back a response
-                logger.info("Update data %s", title)
                 response = jsonify(book=title)
                 response.status_code = 200
                 return response
@@ -222,7 +223,6 @@ class Buy(Resource):
                 return response
         else:
             # forward request to primary
-            logger.info("Forward update request to primary")
             primary = node.coordinator
             url = node.neighbors[primary]
             endpoint = f"http://{url}:{CATALOG_PORT}/catalog/buy"
@@ -250,7 +250,7 @@ class PrimaryUpdate(Resource):
             json_request["buy"] = False
             log_write_request(json_request)
             title = update_data(json_request)
-            logger.info("Update data for book %s", title)
+
             json_response = {"message": "Done update", "book": title}
             response = jsonify(json_response)
             response.status_code = 200
@@ -268,12 +268,8 @@ class Update(Resource):
         Handle put request for update
         Return 200 if update succeeds
         '''
-        logger.info("Receive an update request")
         json_request = request.get_json()
         
-        # acquire lock/cond_variable
-        
-
         # if we are the coordinator
         if (node.node_id == node.coordinator):
             # update the database and propagate it to all replicas
@@ -284,7 +280,6 @@ class Update(Resource):
                 json_request["request_type"] = "update"
                 title = handle_write_request(json_request)
 
-                logger.info("Update data for book %s", title)
                 json_response = {"message": "Done update", "book": title}
                 response = jsonify(json_response)
                 response.status_code = 200
@@ -299,7 +294,7 @@ class Update(Resource):
             primary = node.coordinator
             url = node.neighbors[primary]
             endpoint = f"http://{url}:{CATALOG_PORT}/catalog/update" 
-            logger.info("Forward update request to primary %s", endpoint)
+
             response = requests.put(endpoint, json=json_request)
             if (response.status_code == 200):
                 return response.json(), 200
@@ -308,6 +303,9 @@ class Update(Resource):
 
 
 class NodeInfo(Resource):
+    '''
+    Get the information and coordinator of the current system by a joining node
+    '''
     def get(self):
         response = jsonify(
             {"node_id": node.node_id, "coordinator": node.coordinator, "neighbors": node.alive_neighbors})
@@ -316,19 +314,14 @@ class NodeInfo(Resource):
 
 
 class Election(Resource):
-    # counter = 0
-    # lock = threading.Lock()
-
+    '''
+    Endpoint to start an election
+    '''
     def post(self):
-        # Election.lock.acquire()
-        # Election.counter += 1
-        # Election.lock.release()
-
         data = request.get_json()
         node.alive_neighbors[int(data["node_id"])] = node.neighbors[int(data["node_id"])]
-        logger.info(f"All our alive neighbors {node.alive_neighbors}")
+
         if (data["node_id"] < node.node_id):
-            # Open up a thread to begin the Election
             higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if int(id_) > node.node_id}
             if (len(higher_ids) > 0):
                 t = threading.Thread(target=node.re_election)
@@ -351,7 +344,6 @@ class Coordinator(Resource):
         '''
         data = request.get_json()
         node.coordinator = data["coordinator"]
-        logger.info(f"Data received {data}")
         books = data.get('Books', None)
 
         if books is not None:
@@ -363,46 +355,17 @@ class Coordinator(Resource):
                 if (myBook.stock != serverBook["stock"]):
                     myBook.stock = serverBook["stock"]
 
-        logger.info("Setting Coordinator as %d in node %d" % (node.coordinator, node.node_id))
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
 
 
-# class NodeJoin(Resource):
-#     def post(self):
-#         '''
-#         Add the join request to the queue
-#         Response Ok
-#         '''
-#         # add the node to queue to join the system
-#         data = request.get_json()
-#         node.lock.acquire()
-#         ## open up a connection with the new node to sync database
-#         books = session.query(Book).all()
-#         json_data = {"Books": [book.serializeAll for book in books]}
-#         ## using requests.post()
-#         url = data["url"]
-#         endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
-#         response = requests.post(endpoint, json=json_data)
-
-
-#         node.lock.release()
-#         response = jsonify({'Response': 'OK'})
-#         response.status_code = 200
-#         return response
-
-
 class SyncDatabase(Resource):
+    '''
+    Called by a joining higher processID node to sync the database 
+    with the current primary before starting the election
+    '''
     def get(self):
-        # node.lock.acquire()
         books = session.query(Book).all()
         data = {"Books": [book.serializeAll for book in books]}
-        logger.info(f"Sending data {data}")
-        # node.announce(json_data)
-        # endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
-        # logger.info("Sending request to coordinator at " + endpoint)
-        # response = requests.post(endpoint, json=data, timeout=3.05)
-        # self.lock.release()
         return data
-
