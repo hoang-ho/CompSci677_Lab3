@@ -6,7 +6,9 @@ from api_list import Search, LookUp, Buy, UserList, Cache
 app = Flask(__name__)
 api = Api(app)
 
-# route registration
+'''
+API Endpoints for FrontEnd Server
+'''
 api.add_resource(UserList, '/')
 
 api.add_resource(Search, '/search', '/search/<topic_name>', strict_slashes=False)

@@ -40,5 +40,12 @@
         "topic": "distributed systems",
         "stock": 1000,
         "cost": 1
+    },
+    "book_id_7": {
+        "id": 7,
+        "title": "Spring in Pioneer Valley.",
+        "topic": "graduate school",
+        "stock": 1000,
+        "cost": 10000
     }
 }
