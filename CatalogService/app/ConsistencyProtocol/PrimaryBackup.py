@@ -113,16 +113,13 @@ class Node:
             # sync database and announce leadership
             url = self.alive_neighbors[coordinator]
             logger.info(f'+++++++++++++ starting syncing contaction: {url}')
-            # self.lock.acquire()
-            # books = session.query(Book).all()
-            # data = {"Books": [book.serializeAll for book in books]}
-            # logger.info(f"Sending data {data}")
-            # node.announce(json_data)
+            # call the sync endpoint of current primary
             endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
             logger.info("Sending request to coordinator at " + endpoint)
             response = requests.get(endpoint, timeout=3.05)
             json_response = response.json()
             logger.info(f"Data received {json_response}")
+            # sync up database
             self.lock.acquire()
             for serverBook in json_response["Books"]:
                 myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
@@ -135,8 +132,6 @@ class Node:
             # initialize the election
             higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if id_ > self.node_id}
             if (len(higher_ids) == 0):
-                # announce
-                # node.state = "RUNNING"
                 self.announce()
             else:
                 self.election()
@@ -205,30 +200,34 @@ class Node:
         url = self.neighbors[self.coordinator]
         endpoint = f"http://{url}:{CATALOG_PORT}/info"
         logger.info("Sending request to coordinator at " + endpoint)
-        response = None
+        # response = None
 
         try:
-            response = requests.get(endpoint, timeout=3.05)
-        except requests.Timeout:
+            response = requests.get(endpoint)
+        except:  
             response = None
-
-        logger.info(f'------------ in ping primary response: {response}')
-        # if our coordinator is alive
-        if (response and response.status_code == 200):
-            # update our alive neighbors
-            response_json = response.json()
-            self.alive_neighbors = response_json.get("neighbors")
-            return False
-        else:
-            self.alive_neighbors.pop(self.coordinator)
-            self.coordinator = -1
-            self.re_election()
-            # If leader dies, we return True to begin a new election
-            return True
+            logger.info(f'------------ in ping primary timeout error response: {response}')
+        finally:
+            logger.info(f'------------ in ping primary response: {response}')
+            # if our coordinator is alive
+            if (response and response.status_code == 200):
+                # update our alive neighbors
+                response_json = response.json()
+                self.alive_neighbors = response_json.get("neighbors")
+                return False
+            else:
+                logger.info(f'------------ in ping primary response coord crashed: {response}')
+                # self.alive_neighbors.pop(self.coordinator)
+                # logger.info(f'------------ available neighbors: {self.alive_neighbors}')
+                # self.coordinator = -1
+                # self.re_election()
+                # If leader dies, we return True to begin a new election
+                return True
 
     def re_election(self):
-        if len(node.alive_neighbors) == 0:
-            node.announce()
+        logger.info(f'============= in re_election: {len(self.alive_neighbors)}')
+        if len(self.alive_neighbors) == 1:
+            self.announce()
         else:
             for id_, url in self.alive_neighbors.items():
                 if (id_ != self.node_id):
@@ -272,16 +271,14 @@ def BeginElection(node, wait=True):
     # if there is already a running system, we wait
     while(True):
         if (node.coordinator != node.node_id):
-
-            # node.ping_backups()
-        #     pass
-        # else:
-
-            ping_response = node.ping_primary()
-            time.sleep(3)
-        #     if response:
-        # del node.alive_neighbors[node.coordinator]
-        # node.coordinator = -1
-        # node.re_election()
-
+            ping_response = node.ping_primary()   
+            logger.info(f'============= in continuous check: {ping_response}')      
+            if not ping_response:
+                time.sleep(3)
+            else:
+                logger.info(f'============= available neighbors: {node.alive_neighbors}') 
+                # node.alive_neighbors.pop(node.coordinator)
+                node.coordinator = -1
+                node.re_election()
+                time.sleep(3)
         
