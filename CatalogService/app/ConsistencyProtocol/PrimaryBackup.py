@@ -162,7 +162,7 @@ class Node:
         for r, id_ in responses:
             logger.info(f'in get_alive_neighbors: {r}')
             if r.result() is not None:
-                self.alive_neighbors[id_] = self.neighbors[id_]
+                self.alive_neighbors[int(id_)] = self.neighbors[id_]
                 # self.alive_neighbors.add(id_, self.neighbors[id_])
     
     def ping_backups(self):

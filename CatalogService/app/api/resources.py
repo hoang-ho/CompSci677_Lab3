@@ -115,7 +115,7 @@ def propagateUpdates(update_request):
     threads = list()
     logger.info(f"Propagate updates to other replicas {node.alive_neighbors}")
     for neighbor, url in node.alive_neighbors.items():
-        if (neighbor != node.node_id):
+        if (int(neighbor) != node.node_id):
             endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
             logger.info("Propagate updates to endpoint %s", endpoint)
             t = threading.Thread(target=requests.put, args=(
@@ -317,7 +317,7 @@ class Election(Resource):
         # Election.lock.release()
 
         data = request.get_json()
-        node.alive_neighbors[data["node_id"]] = node.neighbors[data["node_id"]]
+        node.alive_neighbors[int(data["node_id"])] = node.neighbors[data["node_id"]]
         logger.info(f"All our alive neighbors {node.alive_neighbors}")
         if (data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
