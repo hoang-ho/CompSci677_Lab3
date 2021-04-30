@@ -109,20 +109,20 @@ class Node:
             - If there is already a RUNNING system, then this returns False so the STARTING node need to wait to join
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
-        executors = concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(list(self.alive_neighbors.keys())))
+        executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
         # responses = []
-        response = ()
+        # response
         
         for id_, url in self.alive_neighbors.items():
             if (id_ != self.node_id):
                 endpoint = f"http://{url}:{CATALOG_PORT}/info"
                 logger.info("Sending request to node at " + endpoint)
                 r = executors.submit(wrapper_get_request,endpoint)
-                response = (r, id_)
+                response = r
                 break
         
-        coordinator = response[0].result()["coordinator"]
+        logger.info(f'+++++++++++++ in ready for election: {response}')
+        coordinator = response.result().json()["coordinator"]
         
         # compare ID with the leader
         if (self.node_id > coordinator):
@@ -141,8 +141,10 @@ class Node:
         For the primary to ping backups to check if the node is still alive
         '''
         if (self.node_id == self.coordinator):
+
             executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
             responses = []
+
             for id_, url in self.alive_neighbors.items():
                 if (id_ != self.node_id):
                     endpoint = f"http://{url}:{CATALOG_PORT}/info"
@@ -151,7 +153,8 @@ class Node:
                     responses.append((r, id_))
             
             for r, id_ in responses:
-                if r is not None and r.result().status_code != 200:
+                logger.info(f'in ping backups: {r}')
+                if r.result() is not None:
                     self.alive_neighbors.pop(id_)
     
     def get_alive_neighbors(self):
@@ -166,24 +169,32 @@ class Node:
             if (id_ != self.node_id):
                 endpoint = f"http://{url}:{CATALOG_PORT}/healthcheck"
                 logger.info("Sending request to node at " + endpoint)
-                r = executors.submit(requests.get, endpoint, timeout=3.05)
+                r = executors.submit(wrapper_get_request, endpoint)
                 responses.append((r, id_))
         
         for r, id_ in responses:
-            if r is not None and r.result().status_code == 200:
-                self.alive_neighbors.add(id_, self.neighbors[id_])
+            logger.info(f'in get_alive_neighbors: {r}')
+            if r.result() is not None:
+                self.alive_neighbors[id_] = self.neighbors[id_]
+                # self.alive_neighbors.add(id_, self.neighbors[id_])
 
-        return True
 
 def wrapper_get_request(endpoint):
     try:
         response = requests.get(endpoint, timeout=3.05)
-        return response
+        if response.status_code == 200:
+            return response
+        else:
+            return None
     except:
-        logger.info("Node not alive at " + endpoint)
+        logger.info(f'Node not alive at: {endpoint}')
+    
     return None
 
+
 def BeginElection(node, wait=True):
+
+    logger.info(f'============= before len of alive neighbors: {len(node.alive_neighbors)}')
 
     # get all alive neighbors
     node.get_alive_neighbors()
