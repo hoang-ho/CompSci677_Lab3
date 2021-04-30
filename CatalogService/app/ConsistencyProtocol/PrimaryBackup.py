@@ -9,8 +9,22 @@ import concurrent.futures
 import json
 from utils import synchronized
 
+# from sqlalchemy import create_engine
+# from sqlalchemy.orm import sessionmaker
+# from sqlalchemy.pool import StaticPool
+from database.database_setup import Base, Book, session
+
 CATALOG_PORT = os.getenv("CATALOG_PORT")
 logger = logging.getLogger("Catalog-Service")
+
+# Connect to Database and create database session
+# engine = create_engine('sqlite:///books-collection.db',
+#                        echo=True, connect_args={'check_same_thread': False})
+
+# Base.metadata.bind = engine
+
+# DBSession = sessionmaker(bind=engine)
+# session = DBSession()
 
 class Node:
 
@@ -23,11 +37,7 @@ class Node:
         self.node_id = int(os.getenv("PROCESS_ID"))
         all_ids = [int(val) for val in os.getenv("ALL_IDS").split(",")]
         all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
-        self.neighbors = {all_ids[i]: all_urls[i] for i in range(
-            len(all_ids)) if all_ids[i] != self.node_id}
-        # self.state = "STARTING"
-        # self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
-        # self.alive_neighbors = {self.node_id: self.url}
+        self.neighbors = {int(all_ids[i]): all_urls[i] for i in range(len(all_ids)) if all_ids[i] != self.node_id}
         self.alive_neighbors = {}
         self.coordinator = coordinator
         self.lock = threading.Lock()        
@@ -84,8 +94,6 @@ class Node:
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
         executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
-        # responses = []
-        # response
         
         for id_, url in self.alive_neighbors.items():
             if (id_ != self.node_id):
@@ -102,8 +110,29 @@ class Node:
         if (self.node_id > coordinator):
             # sync database and announce leadership
             url = self.alive_neighbors[coordinator]
+            logger.info(f'+++++++++++++ starting syncing contaction: {url}')
+            # call the sync endpoint of current primary
             endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
             logger.info("Sending request to coordinator at " + endpoint)
+            response = requests.get(endpoint, timeout=3.05)
+            json_response = response.json()
+            logger.info(f"Data received {json_response}")
+            # sync up database
+            self.lock.acquire()
+            for serverBook in json_response["Books"]:
+                myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
+                if (myBook.cost != serverBook["cost"]):
+                    myBook.cost = serverBook["cost"]
+                
+                if (myBook.stock != serverBook["stock"]):
+                    myBook.stock = serverBook["stock"]
+            self.lock.release()
+            # initialize the election
+            higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if id_ > self.node_id}
+            if (len(higher_ids) == 0):
+                self.announce()
+            else:
+                self.election()
         else:
             # sync database
             url = self.alive_neighbors[coordinator]
@@ -112,9 +141,7 @@ class Node:
             logger.info("Sending request to coordinator at " + endpoint)
             response = requests.post(endpoint, json=data, timeout=3.05)
             logger.info(f"Response from coordinator at {response.status_code}")
-    
-    
-    
+     
     def get_alive_neighbors(self):
         '''
         This checks is performed by a node that is in starting state - 
@@ -133,8 +160,7 @@ class Node:
         for r, id_ in responses:
             logger.info(f'in get_alive_neighbors: {r}')
             if r.result() is not None:
-                self.alive_neighbors[id_] = self.neighbors[id_]
-                # self.alive_neighbors.add(id_, self.neighbors[id_])
+                self.alive_neighbors[int(id_)] = self.neighbors[int(id_)]
     
     def ping_backups(self):
         '''
@@ -173,20 +199,46 @@ class Node:
         logger.info("Sending request to coordinator at " + endpoint)
 
         try:
-            response = requests.get(endpoint, timeout=3.05)
-        except requests.Timeout:
+            response = requests.get(endpoint)
+        except:  
             response = None
+            logger.info(f'------------ in ping primary timeout error response: {response}')
+        finally:
+            logger.info(f'------------ in ping primary response: {response}')
+            # if our coordinator is alive
+            if (response and response.status_code == 200):
+                # update our alive neighbors
+                response_json = response.json()
+                for id_, url in response_json.get("neighbors").items():
+                    self.alive_neighbors[int(id_)] = url
+                return False
+            else:
+                logger.info(f'------------ in ping primary response coord crashed: {response}')
+                self.alive_neighbors.pop(self.coordinator)
+                # logger.info(f'------------ available neighbors: {self.alive_neighbors}')
+                # self.coordinator = -1
+                # self.re_election()
+                # If leader dies, we return True to begin a new election
+                return True
 
-        # if our coordinator is alive
-        if (response and response.status_code == 200):
-            # update our alive neighbors
-            response_json = response.json()
-            self.alive_neighbors = response_json.get("neighbors")
-            return False
+    def re_election(self):
+        logger.info(f'============= in re_election: {len(self.alive_neighbors)}')
+        if len(self.alive_neighbors) == 1:
+            self.announce()
         else:
-            self.alive_neighbors.pop(self.coordinator)
-            # If leader dies, we return True to begin a new election
-            return True
+            # send election to those with higher ids
+            higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if int(id_) > self.node_id}
+            if (len(higher_ids) == 0):
+                # if we are the one with the highest id
+                self.announce()
+            else:
+                for id_, url in higher_ids.items():
+                    endpoint = f"http://{url}:{CATALOG_PORT}/election"
+                    data = {"node_id": self.node_id}
+                    logger.info("Sending request to coordinator at " + endpoint)
+                    response = requests.post(endpoint, json=data, timeout=3.05)
+                    logger.info(f"Response from coordinator at {response.status_code}")
+
 
 def wrapper_get_request(endpoint):
     try:
@@ -220,9 +272,14 @@ def BeginElection(node, wait=True):
         
     # if there is already a running system, we wait
     while(True):
-        if (node.coordinator == node.node_id):
-            # node.ping_backups()
-            pass
-        else:
-            node.ping_primary()
-        time.sleep(3)
+        if (node.coordinator != node.node_id):
+            ping_response = node.ping_primary()   
+            logger.info(f'============= in continuous check: {ping_response}')      
+            if not ping_response:
+                time.sleep(3)
+            else:
+                logger.info(f'============= available neighbors: {node.alive_neighbors}') 
+                node.coordinator = -1
+                node.re_election()
+                time.sleep(3)
+

@@ -2,6 +2,7 @@
 
 from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
+from sys import stdout
 import json
 import requests
 app = Flask(__name__)
@@ -9,9 +10,18 @@ api = Api(app)
 import sqlite3 as sql
 from datetime import datetime
 import os
-
+import logging
 import threading
 
+# Define logging
+logger = logging.getLogger('front-end-service')
+
+logger.setLevel(logging.INFO) # set logger level
+logFormatter = logging.Formatter\
+("%(name)-12s %(asctime)s %(levelname)-8s %(filename)s:%(funcName)s %(message)s")
+consoleHandler = logging.StreamHandler(stdout) #set streamhandler to stdout
+consoleHandler.setFormatter(logFormatter)
+logger.addHandler(consoleHandler)
 
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
 CATALOG_HOST = os.getenv('CATALOG_HOST')
@@ -66,24 +76,29 @@ class OrderService(Resource):
              cur.execute("INSERT INTO buy_logs (request_id, timestamp, query_id) VALUES( ?, ?,?)",  (request_id, time_stamp, book_id ))
              conn.commit()
 
-        response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json={'id': book_id})
+        try:
+            logger.info(f'querying catalog')
+            response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json={'id': book_id})
+            logger.info(f'querying catalog response: {response}')
+            response_json = response.json()
 
-
-        response_json = response.json()
-        if response.status_code!=200:
-            return {'message': "Error in receiving response from catalog service"}, 500
-        
-        quantity = response_json['stock']
-        if quantity > 0:
-            response = requests.put(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy', json={'book_id': book_id, 'request_id':request_id})
+            # if response.status_code!=200:
+            #     return {'message': "Error in receiving response from catalog service"}, 500
             if response.status_code == 200:
-                return response.json(), 200
-            else:
-                return {'message': 'Buy request falied'}, 500
-        else:
-            return {'message': 'Item not available'}, 200
-
-        return {'message': 'Error while buying'}, 500
+                quantity = response_json['stock']
+                if quantity > 0:
+                    try:
+                        logger.info(f'buying from catalong {book_id}, {request_id}')
+                        response = requests.put(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/buy', json={'book_id': book_id, 'request_id':request_id})
+                        if response.status_code == 200:
+                            logger.info(f'reply of buy catalog endpoint: {response.json()}')
+                            return response.json(), 200
+                    except:
+                        return {'message': 'Buy request falied'}, 500
+                else:
+                    return {'message': 'Item not available'}, 200
+        except:
+            return {'message': 'Catalog Service not running'}, 500
 
 api.add_resource(OrderService, "/order")
 api.add_resource(LogService, "/log")

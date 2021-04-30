@@ -7,7 +7,7 @@ import logging
 import os
 import requests
 import time
-
+import traceback
 
 # Define logging
 logger = logging.getLogger('front-end-service')
@@ -23,15 +23,19 @@ logger.addHandler(consoleHandler)
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
 CATALOG_HOST_1 = os.getenv('CATALOG_HOST_1')
 CATALOG_HOST_2 = os.getenv('CATALOG_HOST_2')
+CATALOG_HOST_3 = os.getenv('CATALOG_HOST_3')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
 # Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
 ORDER_HOST_1 = os.getenv('ORDER_HOST_1')
 ORDER_HOST_2 = os.getenv('ORDER_HOST_2')
+ORDER_HOST_3 = os.getenv('ORDER_HOST_3')
 ORDER_PORT = os.getenv('ORDER_PORT')
 
 # List of available Catalog Hosts and Order Hosts 
-CATALOG_HOSTS = [CATALOG_HOST_1, CATALOG_HOST_2]
-ORDER_HOSTS = [ORDER_HOST_1, ORDER_HOST_2]
+CATALOG_HOSTS = [CATALOG_HOST_1, CATALOG_HOST_2, CATALOG_HOST_3]
+ORDER_HOSTS = [ORDER_HOST_1, ORDER_HOST_2, ORDER_HOST_3]
+
+# BOOK_BOUGHT_FROM = None
 
 #locks
 search_lock = threading.Lock()
@@ -62,7 +66,8 @@ def choose_host_for_buy(AVAILABLE_HOSTS, PORT, data, url):
             if heartbeat_resp.status_code == 200:
                 response = requests.put(f'http://{HOST}:{PORT}{url}', json=data)
             if response.status_code == 200:
-                return response
+                logger.info(f'in rerouting host {HOST}')
+                return response, HOST
         except:
             logger.info(f'server not available at {HOST}')
 
@@ -104,7 +109,7 @@ class Search(Resource):
                 Search.search_count+=1
                 search_lock.release()
 
-                catalog_host_index = Search.search_count%2
+                catalog_host_index = Search.search_count%3
                 CATALOG_HOSTS_AVAILABLE = CATALOG_HOSTS[:catalog_host_index] + CATALOG_HOSTS[catalog_host_index+1:]               
 
                 CATALOG_HOST = CATALOG_HOSTS[catalog_host_index]
@@ -174,7 +179,7 @@ class LookUp(Resource):
                 LookUp.lookup_count+=1
                 lookup_lock.release()
 
-                catalog_host_index = LookUp.lookup_count%2
+                catalog_host_index = LookUp.lookup_count%3
                 CATALOG_HOSTS_AVAILABLE = CATALOG_HOSTS[:catalog_host_index] + CATALOG_HOSTS[catalog_host_index+1:]               
 
                 CATALOG_HOST = CATALOG_HOSTS[catalog_host_index]
@@ -240,9 +245,10 @@ class Buy(Resource):
         try:
             buy_lock.acquire()
             Buy.buy_count+=1
-            data['request_id']=Buy.buy_count
+            data['request_id'] = Buy.buy_count
             buy_lock.release()
-            order_host_index = Buy.buy_count % 2
+            
+            order_host_index = Buy.buy_count % 3
             ORDER_HOSTS_AVAILABLE = ORDER_HOSTS[:order_host_index] + ORDER_HOSTS[order_host_index+1:]               
 
             ORDER_HOST = ORDER_HOSTS[order_host_index]
@@ -250,6 +256,7 @@ class Buy(Resource):
             try:
                 heatbeat_resp = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/healthcheck')
                 if heatbeat_resp.status_code == 200:
+                    logger.info(f'sending data for buy to order {data}')
                     response = requests.put(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
             except:
                 logger.info(f'server not available at {ORDER_HOST}')
@@ -257,22 +264,26 @@ class Buy(Resource):
                 if response.status_code == 200:
                     self.t_end = time.time()
                     logger.info(f'execution time for search: {self.t_end-self.t_start}')
+                    logger.info(f'----------------- response buy: {response.json()}')
                     response_json = response.json()
                     book = response_json.get('book', '')
                     if(book):
-                        return {'message': f'successfully purchased the book {book}'}
+                        BOOK_BOUGHT_FROM = ORDER_HOST
+                        return {'message': f'successfully purchased the book {book} from {BOOK_BOUGHT_FROM}'}
                     return response.json()
 
             url = '/order'
-            response = choose_host_for_buy(ORDER_HOSTS_AVAILABLE, ORDER_PORT, data, url)
+            response, BOOK_BOUGHT_FROM = choose_host_for_buy(ORDER_HOSTS_AVAILABLE, ORDER_PORT, data, url)
+            logger.info(f'-------------- response buy: {response.json()}')
             self.t_end = time.time()
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             response_json = response.json()
             book = response_json.get('book', '')
             if(book):
-                return {'message': f'successfully purchased the book {book}'}
+                return {'message': f'successfully purchased the book {book} from {BOOK_BOUGHT_FROM}'}
             return response.json()
-        except:
+        except Exception:
+            traceback.print_exc()
             self.t_end = time.time()
             logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
             return {'message': 'something went wrong. Please try again'}, 500

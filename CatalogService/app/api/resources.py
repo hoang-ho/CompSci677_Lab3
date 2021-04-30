@@ -3,7 +3,7 @@ from flask_restful import Api, Resource
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from database.database_setup import Base, Book
+from database.database_setup import Base, Book, session
 from ConsistencyProtocol.PrimaryBackup import Node, BeginElection
 from utils import synchronized, log_write_request, log_read_request
 from sys import stdout
@@ -29,13 +29,13 @@ consoleHandler.setFormatter(logFormatter)
 logger.addHandler(consoleHandler)
 
 # Connect to Database and create database session
-engine = create_engine('sqlite:///books-collection.db',
-                       echo=True, connect_args={'check_same_thread': False})
+# engine = create_engine('sqlite:///books-collection.db',
+#                        echo=True, connect_args={'check_same_thread': False})
 
-Base.metadata.bind = engine
+# Base.metadata.bind = engine
 
-DBSession = sessionmaker(bind=engine)
-session = DBSession()
+# DBSession = sessionmaker(bind=engine)
+# session = DBSession()
 node = Node()
 
 @synchronized
@@ -70,9 +70,9 @@ def update_data(update_request):
     return book.title
 
 
-def wrapper_put_request(endpoint):
+def wrapper_put_request(endpoint, update_request):
     try:
-        response = requests.put(endpoint, timeout=3.05)
+        response = requests.put(endpoint, json=update_request, timeout=3.05)
         if response.status_code == 200:
             return response
         else:
@@ -115,11 +115,13 @@ def propagateUpdates(update_request):
     threads = list()
     logger.info(f"Propagate updates to other replicas {node.alive_neighbors}")
     for neighbor, url in node.alive_neighbors.items():
-        if (neighbor != node.node_id):
+        if (int(neighbor) != node.node_id):
             endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
             logger.info("Propagate updates to endpoint %s", endpoint)
-            t = threading.Thread(target=requests.put, args=(
-                endpoint,), kwargs={"json": update_request, "timeout": 3.05})
+            t = threading.Thread(target=wrapper_put_request,
+                                 args=(endpoint, update_request))
+            # t = threading.Thread(target=requests.put, args=(
+            #     endpoint,), kwargs={"json": update_request, "timeout": 3.05})
             threads.append(t)
             t.start()
 
@@ -193,8 +195,14 @@ class Buy(Resource):
         query_id=json_request['request_id']
         fd = open('write_requests.json', "r+")
         data = json.loads(fd.read())
-        if "request_id_" + str(query_id) in data:
-            return
+        target_key = "request_id_" + str(query_id)
+        if target_key in data:
+            logger.info('======== in target key')
+            book_id = json_request['book_id']
+            book = session.query(Book).filter_by(id=book_id).one()
+            response = jsonify(book=book.title)
+            response.status_code = 200
+            return response
         if (node.node_id == node.coordinator):
             # if we are the primary
             if ("book_id" in json_request):
@@ -317,17 +325,16 @@ class Election(Resource):
         # Election.lock.release()
 
         data = request.get_json()
-        node.alive_neighbors[data["node_id"]] = node.neighbors[data["node_id"]]
+        node.alive_neighbors[int(data["node_id"])] = node.neighbors[int(data["node_id"])]
         logger.info(f"All our alive neighbors {node.alive_neighbors}")
         if (data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
-            higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
+            higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if int(id_) > node.node_id}
             if (len(higher_ids) > 0):
-                threading.Thread(target=node.election).start()
-            else:
-                # if data['node_id'] not in node.alive_neighbors:
-                #     node_id = data['node_id']
-                #     node.alive_neighbors.add(node_id, node.neighbors[node_id])                   
+                t = threading.Thread(target=node.re_election)
+                t.start()
+                t.join()
+            else:                
                 t = threading.Thread(target=push_data)
                 t.start()
                 t.join()
@@ -345,13 +352,16 @@ class Coordinator(Resource):
         data = request.get_json()
         node.coordinator = data["coordinator"]
         logger.info(f"Data received {data}")
-        for serverBook in data["Books"]:
-            myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
-            if (myBook.cost != serverBook["cost"]):
-                myBook.cost = serverBook["cost"]
+        books = data.get('Books', None)
 
-            if (myBook.stock != serverBook["stock"]):
-                myBook.stock = serverBook["stock"]
+        if books is not None:
+            for serverBook in books:
+                myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
+                if (myBook.cost != serverBook["cost"]):
+                    myBook.cost = serverBook["cost"]
+
+                if (myBook.stock != serverBook["stock"]):
+                    myBook.stock = serverBook["stock"]
 
         logger.info("Setting Coordinator as %d in node %d" % (node.coordinator, node.node_id))
         response = jsonify({'Response': 'OK'})
@@ -383,27 +393,16 @@ class Coordinator(Resource):
 #         return response
 
 
-# class SyncDatabase(Resource):
-#     def post(self):
-#         # Sync the database
-#         json_request = request.get_json()
-#         for serverBook in json_request["Books"]:
-#             myBook = session.query(Book).filter_by(serverBook["id"]).one()
-#             if (myBook.cost != serverBook["cost"]):
-#                 myBook.cost = serverBook["cost"]
-            
-#             if (myBook.stock != serverBook["stock"]):
-#                 myBook.stock = serverBook["stock"]
-        
-#         # initialize the election
-#         higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
-#         if (len(higher_ids) == 0):
-#             # announce
-#             node.state = "RUNNING"
-#             node.announce()
-#         else:
-#             node.election()
-#         response = jsonify({'Response': 'OK'})
-#         response.status_code = 200
-#         return response
+class SyncDatabase(Resource):
+    def get(self):
+        # node.lock.acquire()
+        books = session.query(Book).all()
+        data = {"Books": [book.serializeAll for book in books]}
+        logger.info(f"Sending data {data}")
+        # node.announce(json_data)
+        # endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
+        # logger.info("Sending request to coordinator at " + endpoint)
+        # response = requests.post(endpoint, json=data, timeout=3.05)
+        # self.lock.release()
+        return data
 
