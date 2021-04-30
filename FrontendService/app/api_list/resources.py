@@ -7,7 +7,6 @@ import logging
 import os
 import requests
 import time
-import traceback
 
 # Define logging
 logger = logging.getLogger('front-end-service')
@@ -20,12 +19,13 @@ consoleHandler.setFormatter(logFormatter)
 logger.addHandler(consoleHandler)
 
 
-# Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
+# Import config variables for all the Catalog Services in the system
 CATALOG_HOST_1 = os.getenv('CATALOG_HOST_1')
 CATALOG_HOST_2 = os.getenv('CATALOG_HOST_2')
 CATALOG_HOST_3 = os.getenv('CATALOG_HOST_3')
 CATALOG_PORT = os.getenv('CATALOG_PORT')
-# Import config variables Default to backer server for consistency implementation for now. You'd need to modify this!
+
+# Import config variables for all the Order Services in the system
 ORDER_HOST_1 = os.getenv('ORDER_HOST_1')
 ORDER_HOST_2 = os.getenv('ORDER_HOST_2')
 ORDER_HOST_3 = os.getenv('ORDER_HOST_3')
@@ -34,8 +34,6 @@ ORDER_PORT = os.getenv('ORDER_PORT')
 # List of available Catalog Hosts and Order Hosts 
 CATALOG_HOSTS = [CATALOG_HOST_1, CATALOG_HOST_2, CATALOG_HOST_3]
 ORDER_HOSTS = [ORDER_HOST_1, ORDER_HOST_2, ORDER_HOST_3]
-
-# BOOK_BOUGHT_FROM = None
 
 #locks
 search_lock = threading.Lock()
@@ -46,8 +44,11 @@ buy_lock = threading.Lock()
 cache = dict()
 
 def choose_host(AVAILABLE_HOSTS, PORT, data, url):
+    '''
+    Function to resend the request in case of a failure for search and lookup
+    '''
     for HOST in AVAILABLE_HOSTS:
-        logger.info(f'Trying HOST........ {HOST} at PORT........... {PORT}')
+        logger.info(f'Trying HOST.....{HOST} at PORT......{PORT}')
         try:
             heartbeat_resp = requests.get(f'http://{HOST}:{PORT}/healthcheck')
             if heartbeat_resp.status_code == 200:
@@ -59,8 +60,11 @@ def choose_host(AVAILABLE_HOSTS, PORT, data, url):
 
 
 def choose_host_for_buy(AVAILABLE_HOSTS, PORT, data, url):
+    '''
+    Function to resend the request in case of a failure for buy requests
+    '''
     for HOST in AVAILABLE_HOSTS:
-        logger.info(f'Trying HOST........ {HOST} at PORT........... {PORT}')
+        logger.info(f'Trying HOST.....{HOST} at PORT......{PORT}')
         try:
             heartbeat_resp = requests.get(f'http://{HOST}:{PORT}/healthcheck')
             if heartbeat_resp.status_code == 200:
@@ -89,7 +93,7 @@ class Search(Resource):
                 'topic_name': 'a string of the value distributed-systems or graduate-school'
             }
 
-        # validation
+        # data validation
         if(topic_name == 'distributed-systems'):
             data = {"topic": "distributed systems"}
         elif(topic_name == 'graduate-school'):
@@ -109,14 +113,13 @@ class Search(Resource):
                 Search.search_count+=1
                 search_lock.release()
 
+                # Choosing the initial server by simple Round Robin
                 catalog_host_index = Search.search_count%3
                 CATALOG_HOSTS_AVAILABLE = CATALOG_HOSTS[:catalog_host_index] + CATALOG_HOSTS[catalog_host_index+1:]               
-
                 CATALOG_HOST = CATALOG_HOSTS[catalog_host_index]
 
                 try:
                     heartbeat_resp = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/healthcheck')
-                    logger.info(f'Heartbeat check: {heartbeat_resp}')
                     if heartbeat_resp.status_code == 200:
                         response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
                 except:
@@ -134,7 +137,6 @@ class Search(Resource):
                     cache[target_key] = response.json()
             
             cached_response = cache[target_key]
-
             self.t_end = time.time()
             logger.info(f'execution time for search: {self.t_end-self.t_start}')
             return cached_response
@@ -161,9 +163,9 @@ class LookUp(Resource):
                 'item_id': 'string that specifies the book id. It accepts value from 1 to 4'
             }
 
-        # validation
+        # data validation
         id = int(item_id)
-        if(id > 4 or id < 1):
+        if(id > 7 or id < 1):
             self.t_end = time.time()
             logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
             return {"message": "Please enter a correct id"}, 400  
@@ -179,14 +181,13 @@ class LookUp(Resource):
                 LookUp.lookup_count+=1
                 lookup_lock.release()
 
+                # Choosing the initial server by simple Round Robin
                 catalog_host_index = LookUp.lookup_count%3
                 CATALOG_HOSTS_AVAILABLE = CATALOG_HOSTS[:catalog_host_index] + CATALOG_HOSTS[catalog_host_index+1:]               
-
                 CATALOG_HOST = CATALOG_HOSTS[catalog_host_index]
 
                 try:
                     heartbeat_resp = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/healthcheck')
-                    logger.info(f'Heart beat: {heartbeat_resp}')
                     if heartbeat_resp.status_code == 200:
                         response = requests.get(f'http://{CATALOG_HOST}:{CATALOG_PORT}/catalog/query', json=data)
                 except:
@@ -205,7 +206,6 @@ class LookUp(Resource):
                     cache[target_key] = response.json()
 
             cached_response = cache[target_key]
-
             self.t_end = time.time()
             logger.info(f'execution time for search: {self.t_end-self.t_start}')
             return cached_response
@@ -232,9 +232,9 @@ class Buy(Resource):
                 'topic_name': 'string that specifies the book id. It accepts value from 1 to 4'
             }
 
-        # validation
+        # data validation
         id = int(item_id)
-        if(id > 4 or id < 1):
+        if(id > 7 or id < 1):
             self.t_end = time.time()
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             return {"message": "Please enter a correct id"}, 400  
@@ -248,15 +248,14 @@ class Buy(Resource):
             data['request_id'] = Buy.buy_count
             buy_lock.release()
             
+            # Choosing the initial server by simple Round Robin
             order_host_index = Buy.buy_count % 3
             ORDER_HOSTS_AVAILABLE = ORDER_HOSTS[:order_host_index] + ORDER_HOSTS[order_host_index+1:]               
-
             ORDER_HOST = ORDER_HOSTS[order_host_index]
 
             try:
                 heatbeat_resp = requests.get(f'http://{ORDER_HOST}:{ORDER_PORT}/healthcheck')
                 if heatbeat_resp.status_code == 200:
-                    logger.info(f'sending data for buy to order {data}')
                     response = requests.put(f'http://{ORDER_HOST}:{ORDER_PORT}/order', json=data)
             except:
                 logger.info(f'server not available at {ORDER_HOST}')
@@ -264,7 +263,6 @@ class Buy(Resource):
                 if response.status_code == 200:
                     self.t_end = time.time()
                     logger.info(f'execution time for search: {self.t_end-self.t_start}')
-                    logger.info(f'----------------- response buy: {response.json()}')
                     response_json = response.json()
                     book = response_json.get('book', '')
                     if(book):
@@ -274,7 +272,6 @@ class Buy(Resource):
 
             url = '/order'
             response, BOOK_BOUGHT_FROM = choose_host_for_buy(ORDER_HOSTS_AVAILABLE, ORDER_PORT, data, url)
-            logger.info(f'-------------- response buy: {response.json()}')
             self.t_end = time.time()
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             response_json = response.json()
@@ -282,8 +279,7 @@ class Buy(Resource):
             if(book):
                 return {'message': f'successfully purchased the book {book} from {BOOK_BOUGHT_FROM}'}
             return response.json()
-        except Exception:
-            traceback.print_exc()
+        except:
             self.t_end = time.time()
             logger.info(f'execution time for lookup: {self.t_end-self.t_start}')
             return {'message': 'something went wrong. Please try again'}, 500
@@ -312,4 +308,3 @@ class Cache(Resource):
             logger.info(f'target key to pop: {target_key}')
             invalidate = cache.pop(target_key, None)
 
-        # logger.info(f'Invalidate the entry: {invalidate}')
