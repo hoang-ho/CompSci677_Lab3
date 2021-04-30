@@ -23,11 +23,12 @@ class Node:
         self.node_id = int(os.getenv("PROCESS_ID"))
         all_ids = [int(val) for val in os.getenv("ALL_IDS").split(",")]
         all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
-        self.neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
-        self.url = self.neighbors[self.node_id]
+        self.neighbors = {all_ids[i]: all_urls[i] for i in range(
+            len(all_ids)) if all_ids[i] != self.node_id}
         self.state = "STARTING"
         # self.alive_neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids))}
-        self.alive_neighbors = {self.node_id: self.url}
+        # self.alive_neighbors = {self.node_id: self.url}
+        self.alive_neighbors = {}
         self.coordinator = coordinator
         self.lock = threading.Lock()        
     
@@ -60,7 +61,6 @@ class Node:
         '''
         self.coordinator = self.node_id
         data["coordinator"] = self.node_id
-        # data = {"coordinator": self.node_id}
 
         logger.info(f'++++++++++++++++++++ data sending in annouce: {data}')
 
@@ -68,7 +68,7 @@ class Node:
             endpoint = f"http://{url}:{CATALOG_PORT}/coordinator"
             try:
                 response = requests.post(endpoint, json=data, timeout=3.05)
-            except requests.Timeout:
+            except:
                 response = None
 
             if (response and response.status_code == 200):
@@ -109,7 +109,7 @@ class Node:
             - If there is already a RUNNING system, then this returns False so the STARTING node need to wait to join
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
-        executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
+        executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
         # responses = []
         # response
         
@@ -134,7 +134,10 @@ class Node:
             # sync database
             url = self.alive_neighbors[coordinator]
             endpoint = f"http://{url}:{CATALOG_PORT}/election"
-            response = requests.post(endpoint, timeout=3.05)
+            data = {"node_id": self.node_id}
+            logger.info("Sending request to coordinator at " + endpoint)
+            response = requests.post(endpoint, json=data, timeout=3.05)
+            logger.info(f"Response from coordinator at {response.status_code}")
     
     def ping_backups(self):
         '''
@@ -142,7 +145,7 @@ class Node:
         '''
         if (self.node_id == self.coordinator):
 
-            executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
+            executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
             responses = []
 
             for id_, url in self.alive_neighbors.items():
@@ -162,7 +165,7 @@ class Node:
         This checks is performed by a node that is in starting state - 
         to get a list of all the other alive nodes in the systems
         '''
-        executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.alive_neighbors.keys())))
+        executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
         responses = []
         
         for id_, url in self.neighbors.items():
@@ -201,7 +204,7 @@ def BeginElection(node, wait=True):
 
     logger.info(f'============= len of alive neighbors: {len(node.alive_neighbors)}')
 
-    if len(node.alive_neighbors) == 1:
+    if len(node.alive_neighbors) == 0:
         # This means that there is only one node and they are the leader
         # We will have to annouce that the node is a coordinator
         node.announce()

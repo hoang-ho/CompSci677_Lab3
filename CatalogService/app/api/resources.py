@@ -123,11 +123,11 @@ def push_invalidate_cache(id):
 def push_data():
     node.lock.acquire()
     books = session.query(Book).all()
-    json_data = {"book_id_" + book.id:book.serializeAll for book in books}
-    node.lock.acquire()
+    json_data = {"Books": [book.serializeAll for book in books]}
+    logger.info(f"Sending data {json_data}")
     node.announce(json_data)
     node.lock.release()
-    
+
 
 class HealthCheck(Resource):
     def get(self):
@@ -320,11 +320,14 @@ class Election(Resource):
 
 class Coordinator(Resource):
     def post(self):
+        '''
+        Receive the data the primary
+        '''
         data = request.get_json()
         node.coordinator = data["coordinator"]
-
+        logger.info(f"Data received {data}")
         for serverBook in data["Books"]:
-            myBook = session.query(Book).filter_by(serverBook["id"]).one()
+            myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
             if (myBook.cost != serverBook["cost"]):
                 myBook.cost = serverBook["cost"]
 
