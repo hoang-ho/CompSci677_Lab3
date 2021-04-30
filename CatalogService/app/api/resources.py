@@ -70,6 +70,19 @@ def update_data(update_request):
     return book.title
 
 
+def wrapper_put_request(endpoint):
+    try:
+        response = requests.put(endpoint, timeout=3.05)
+        if response.status_code == 200:
+            return response
+        else:
+            return None
+    except:
+        logger.info(f'Node not alive at: {endpoint}')
+
+    return None
+
+
 def handle_write_request(write_request):
     node.lock.acquire()
     # Write to log
@@ -295,18 +308,18 @@ class NodeInfo(Resource):
 
 
 class Election(Resource):
-    counter = 0
-    lock = threading.Lock()
+    # counter = 0
+    # lock = threading.Lock()
 
     def post(self):
-        Election.lock.acquire()
-        Election.counter += 1
-        Election.lock.release()
+        # Election.lock.acquire()
+        # Election.counter += 1
+        # Election.lock.release()
 
         data = request.get_json()
         node.alive_neighbors[data["node_id"]] = node.neighbors[data["node_id"]]
         logger.info(f"All our alive neighbors {node.alive_neighbors}")
-        if (Election.counter == 1 and data["node_id"] < node.node_id):
+        if (data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
             higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
             if (len(higher_ids) > 0):
