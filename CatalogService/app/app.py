@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_restful import Api
-from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, node, prepopulate, logger
+from api.resources import HealthCheck, Query, Buy, PrimaryUpdate, Update, NodeInfo, Election, Coordinator, SyncDatabase, NodeJoin, node, prepopulate, logger
 from ConsistencyProtocol.PrimaryBackup import BeginElection
 import threading
 import os
@@ -46,9 +46,9 @@ api.add_resource(NodeInfo, "/info")
 api.add_resource(Election, "/election")
 api.add_resource(Coordinator, "/coordinator")
 api.add_resource(SyncDatabase, "/sync_database")
+api.add_resource(NodeJoin, "/request_to_sync")
 
 
-@app.before_first_request
 def activate_election():
     thread = threading.Thread(target=BeginElection, args=(node,))
     thread.start()
@@ -57,3 +57,11 @@ if __name__ == "__main__":
     # run the application
     app.debug = True
     app.run(host='0.0.0.0', port=5002, debug=True)
+
+'''
+Goal:
+    - We need a background process/thread that keeps running and check for heartbeat from both backup and primary
+    - If we use @app.before_first_request to begin election then it'd be problem if we are syncing via our app 
+    because we are posting back to the node that wants to join
+    - If we don't use this  @app.before_first_request, then two questions: (1) How to do the background thread
+'''

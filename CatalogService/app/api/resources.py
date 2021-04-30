@@ -37,8 +37,6 @@ Base.metadata.bind = engine
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
 node = Node()
-lock = threading.Lock()
-
 
 @synchronized
 def update_data(update_request):
@@ -72,8 +70,8 @@ def update_data(update_request):
     return book.title
 
 
-@synchronized
 def handle_write_request(write_request):
+    node.lock.acquire()
     # Write to log
     log_write_request(write_request)
     # propagate update to other replicas
@@ -82,6 +80,7 @@ def handle_write_request(write_request):
 
     # execute the update
     title = update_data(write_request)
+    node.lock.release()
     return title
 
 
@@ -136,8 +135,7 @@ class Query(Resource):
         logger.info("Receive a query request ")
         if (request_data and ("id" in request_data or "topic" in request_data)):
             if ("id" in request_data):
-                books = session.query(Book).filter_by(
-                    id=request_data["id"]).all()
+                books = session.query(Book).filter_by(id=request_data["id"]).all()
                 if (len(books) == 0):
                     response = jsonify(success=False)
                     response.status_code = 400
@@ -148,8 +146,7 @@ class Query(Resource):
                     response.status_code = 200
 
             elif ("topic" in request_data):
-                books = session.query(Book).filter_by(
-                    topic=request_data["topic"]).all()
+                books = session.query(Book).filter_by(topic=request_data["topic"]).all()
                 request_data["time_stamp"] = time.time()
                 log_read_request(request_data)
                 response = jsonify(items={book.title: book.id for book in books})
@@ -236,6 +233,9 @@ class Update(Resource):
         '''
         logger.info("Receive an update request")
         json_request = request.get_json()
+        
+        # acquire lock/cond_variable
+        
 
         # if we are the coordinator
         if (node.node_id == node.coordinator):
@@ -268,35 +268,27 @@ class Update(Resource):
                 return response.json(), 200
             else:
                 return response.json(), 500
-
-
-class SyncDatabase(Resource):
-    def get(self):
-        books = session.query(Book).all()
-        response = jsonify(Books = [book.serializeAll for book in books])
-        response.status_code = 200
-        return response
-
-
 class NodeInfo(Resource):
     def get(self):
         response = jsonify(
-            {"node_id": node.node_id, "coordinator": node.coordinator, "neighbors": node.alive_neighbors})
+            {"node_id": node.node_id, "coordinator": node.coordinator, "states": node.state, "neighbors": node.alive_neighbors})
         response.status_code = 200
         return response
 
 
 class Election(Resource):
     counter = 0
+    lock = threading.Lock()
+
     def post(self):
-        lock.acquire()
+        Election.lock.acquire()
         Election.counter += 1
-        lock.release()
+        Election.lock.release()
 
         data = request.get_json()
         if (Election.counter == 1 and data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
-            threading.Thread(target=BeginElection, args=(node, False)).start()
+            # threading.Thread(target=BeginElection, args=(node, False)).start()
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
@@ -307,6 +299,53 @@ class Coordinator(Resource):
         data = request.get_json()
         node.coordinator = data["coordinator"]
         logger.info("Setting Coordinator as %d in node %d" % (node.coordinator, node.node_id))
+        response = jsonify({'Response': 'OK'})
+        response.status_code = 200
+        return response
+
+class NodeJoin(Resource):
+    def post(self):
+        '''
+        Add the join request to the queue
+        Response Ok
+        '''
+        # add the node to queue to join the system
+        data = request.get_json()
+        node.lock.acquire()
+        ## open up a connection with the new node to sync database
+        books = session.query(Book).all()
+        json_data = {"Books": [book.serializeAll for book in books]}
+        ## using requests.post()
+        url = data["url"]
+        endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
+        response = requests.post(endpoint, json=json_data)
+
+
+        node.lock.release()
+        response = jsonify({'Response': 'OK'})
+        response.status_code = 200
+        return response
+
+class SyncDatabase(Resource):
+    def post(self):
+        # Sync the database
+        json_request = request.get_json()
+        for serverBook in json_request["Books"]:
+            myBook = session.query(Book).filter_by(serverBook["id"]).one()
+            if (myBook.cost != serverBook["cost"]):
+                myBook.cost = serverBook["cost"]
+            
+            if (myBook.stock != serverBook["stock"]):
+                myBook.stock = serverBook["stock"]
+        
+        # initialize the election
+        higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
+        if (len(higher_ids) == 0):
+            # announce
+            node.state = "RUNNING"
+            node.announce()
+        else:
+            node.election()
         response = jsonify({'Response': 'OK'})
         response.status_code = 200
         return response
