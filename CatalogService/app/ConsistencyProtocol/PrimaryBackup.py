@@ -81,55 +81,63 @@ class Node:
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
         executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
-
+        responses = []
         for id_, url in self.alive_neighbors.items():
             if (id_ != self.node_id):
                 endpoint = f"http://{url}:{CATALOG_PORT}/info"
                 r = executors.submit(wrapper_get_request,endpoint)
-                response = r
-                break
-
-        coordinator = response.result().json()["coordinator"]
+                responses.append(r)
         
-        # if a higher processID joins the system
-        # Step1: sync database with the current primary
-        # Step2: starts the election
-        if (self.node_id > coordinator):
-            
-            url = self.alive_neighbors[coordinator]
-
-            # call the sync endpoint of current primary
-            endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
-            response = requests.get(endpoint, timeout=3.05)
-            json_response = response.json()
-
-            # sync up database
-            self.lock.acquire()
-            for serverBook in json_response["Books"]:
-                myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
-                if (myBook.cost != serverBook["cost"]):
-                    myBook.cost = serverBook["cost"]
-                
-                if (myBook.stock != serverBook["stock"]):
-                    myBook.stock = serverBook["stock"]
-            self.lock.release()
-
-            # initialize the election
-            higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if id_ > self.node_id}
-            if (len(higher_ids) == 0):
-                self.announce()
-            else:
-                self.election()
+        coordinators = []
+        for response in responses:
+            coordinators.append(response.result().json()["coordinator"])
+        
+        # If every node starts at the same time and no primary has been elected
+        if (coordinators.count(-1) == len(coordinators)):
+            self.election()
         else:
-            # if a lower processID joins the system
+            # if we are joining a current running system
+            coordinator = coordinators[0]
+            
+            # if a higher processID joins the system
             # Step1: sync database with the current primary
-            # Step2: set the primary of the system as our coordinator
+            # Step2: starts the election
+            if (self.node_id > coordinator):
+                
+                url = self.alive_neighbors[coordinator]
 
-            # sync database
-            url = self.alive_neighbors[coordinator]
-            endpoint = f"http://{url}:{CATALOG_PORT}/election"
-            data = {"node_id": self.node_id}
-            response = requests.post(endpoint, json=data, timeout=3.05)
+                # call the sync endpoint of current primary
+                endpoint = f"http://{url}:{CATALOG_PORT}/sync_database"
+                response = requests.get(endpoint, timeout=3.05)
+                json_response = response.json()
+
+                # sync up database
+                self.lock.acquire()
+                for serverBook in json_response["Books"]:
+                    myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
+                    if (myBook.cost != serverBook["cost"]):
+                        myBook.cost = serverBook["cost"]
+                    
+                    if (myBook.stock != serverBook["stock"]):
+                        myBook.stock = serverBook["stock"]
+                self.lock.release()
+
+                # initialize the election
+                higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if id_ > self.node_id}
+                if (len(higher_ids) == 0):
+                    self.announce()
+                else:
+                    self.election()
+            else:
+                # if a lower processID joins the system
+                # Step1: sync database with the current primary
+                # Step2: set the primary of the system as our coordinator
+
+                # sync database
+                url = self.alive_neighbors[coordinator]
+                endpoint = f"http://{url}:{CATALOG_PORT}/election"
+                data = {"node_id": self.node_id}
+                response = requests.post(endpoint, json=data, timeout=3.05)
   
     def get_alive_neighbors(self):
         '''

@@ -43,11 +43,11 @@ def update_data(update_request):
         book.stock -= 1
         data[key]["stock"] -= 1
     elif (update_request["request_type"] == "update"):
-        if (update_data.get("stock", None)):
+        if (update_request.get("stock", None)):
             book.stock = update_request["stock"]
             data[key]["stock"] = update_request["stock"]
         
-        if (update_data.get("cost", None)):
+        if (update_request.get("cost", None)):
             book.cost = update_request["cost"]
             data[key]["cost"] = update_request["cost"]
 
