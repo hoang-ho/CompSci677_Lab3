@@ -118,7 +118,7 @@ class Node:
             if (id_ != self.node_id):
                 endpoint = f"http://{url}:{CATALOG_PORT}/info"
                 logger.info("Sending request to node at " + endpoint)
-                r = executors.submit(requests.get, endpoint, timeout=3.05)
+                r = executors.submit(wrapper_get_request,endpoint)
                 response = (r, id_)
                 break
         
@@ -147,11 +147,11 @@ class Node:
                 if (id_ != self.node_id):
                     endpoint = f"http://{url}:{CATALOG_PORT}/info"
                     logger.info("Sending request to node at " + endpoint)
-                    r = executors.submit(requests.get, endpoint, timeout=3.05)
+                    r = executors.submit(wrapper_get_request, endpoint)
                     responses.append((r, id_))
             
             for r, id_ in responses:
-                if r.result().status_code != 200:
+                if r is not None and r.result().status_code != 200:
                     self.alive_neighbors.pop(id_)
     
     def get_alive_neighbors(self):
@@ -170,14 +170,18 @@ class Node:
                 responses.append((r, id_))
         
         for r, id_ in responses:
-            if r.result().status_code == 200:
+            if r is not None and r.result().status_code == 200:
                 self.alive_neighbors.add(id_, self.neighbors[id_])
-                # response_json = r.result().json()
-                # if (self.node_id not in response_json.get("neighbors")):
-                #     return False
 
         return True
-        
+
+def wrapper_get_request(endpoint):
+    try:
+        response = requests.get(endpoint, timeout=3.05)
+        return response
+    except:
+        logger.info("Node not alive at " + endpoint)
+    return None
 
 def BeginElection(node, wait=True):
 
