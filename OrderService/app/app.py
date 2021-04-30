@@ -53,7 +53,7 @@ class OrderService(Resource):
         Handle a put request to buy a book
         '''
         request_data = request.get_json()
-        id= request_data['id']
+        id= request_data['book_id']
         query_id=request_data['request_id']
         if not id:
             return json.dumps({'message':"Invalid request"})

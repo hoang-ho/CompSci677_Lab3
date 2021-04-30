@@ -220,7 +220,7 @@ class Buy(Resource):
             logger.info(f'execution time for buy: {self.t_end-self.t_start}')
             return {"message": "Please enter a correct id"}, 400  
 
-        data = {"id": id,'request_id':'Na'}
+        data = {"book_id": id,'request_id':'Na'}
 
         # requesting to order
         try:
