@@ -7,8 +7,8 @@ services:
     build: ./CatalogService
     environment:
       PROCESS_ID: 123
-      ALL_IDS: "123,111"
-      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2"
+      ALL_IDS: "123,111,114"
+      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2,catalog_service_3"
       CATALOG_PORT: 5002
     ports:
       - "5001:5002"
@@ -20,11 +20,24 @@ services:
     build: ./CatalogService
     environment:
       PROCESS_ID: 111
-      ALL_IDS: "123,111"
-      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2"
+      ALL_IDS: "123,111,114"
+      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2,catalog_service_3"
       CATALOG_PORT: 5002
     ports:
       - "5002:5002"
+    env_file: config_env
+  
+  catalog_service_3:
+    container_name: catalog_service_3
+    image: hoangho/catalog_service
+    build: ./CatalogService
+    environment:
+      PROCESS_ID: 114
+      ALL_IDS: "123,111,114"
+      ALL_HOSTNAMES: "catalog_service_1,catalog_service_2,catalog_service_3"
+      CATALOG_PORT: 5002
+    ports:
+      - "5003:5002"
     env_file: config_env
   
   order_service_1:
@@ -50,6 +63,18 @@ services:
       CATALOG_PORT: 5002
     ports:
       - "5006:5007"
+  
+  order_service_3:
+    container_name: order_service_3
+    image: hoangho/order_service
+    build: 
+      context: ./OrderService
+      dockerfile: deployments/Dockerfile
+    environment:
+      CATALOG_HOST: "catalog_service_3"
+      CATALOG_PORT: 5002
+    ports:
+      - "5005:5007"
 
   front_end_service:
     container_name: front_end_service

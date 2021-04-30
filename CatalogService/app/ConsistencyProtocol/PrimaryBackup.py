@@ -37,7 +37,7 @@ class Node:
         self.node_id = int(os.getenv("PROCESS_ID"))
         all_ids = [int(val) for val in os.getenv("ALL_IDS").split(",")]
         all_urls = [val for val in os.getenv("ALL_HOSTNAMES").split(",")]
-        self.neighbors = {all_ids[i]: all_urls[i] for i in range(len(all_ids)) if all_ids[i] != self.node_id}
+        self.neighbors = {int(all_ids[i]): all_urls[i] for i in range(len(all_ids)) if all_ids[i] != self.node_id}
         self.alive_neighbors = {}
         self.coordinator = coordinator
         self.lock = threading.Lock()        
@@ -94,8 +94,6 @@ class Node:
             - If everyone is in STARTING state, then this returns True so we can begin an election
         '''
         executors = concurrent.futures.ThreadPoolExecutor(max_workers=len(list(self.neighbors.keys())))
-        # responses = []
-        # response
         
         for id_, url in self.alive_neighbors.items():
             if (id_ != self.node_id):
@@ -162,8 +160,7 @@ class Node:
         for r, id_ in responses:
             logger.info(f'in get_alive_neighbors: {r}')
             if r.result() is not None:
-                self.alive_neighbors[int(id_)] = self.neighbors[id_]
-                # self.alive_neighbors.add(id_, self.neighbors[id_])
+                self.alive_neighbors[int(id_)] = self.neighbors[int(id_)]
     
     def ping_backups(self):
         '''
@@ -200,7 +197,6 @@ class Node:
         url = self.neighbors[self.coordinator]
         endpoint = f"http://{url}:{CATALOG_PORT}/info"
         logger.info("Sending request to coordinator at " + endpoint)
-        # response = None
 
         try:
             response = requests.get(endpoint)
@@ -213,11 +209,12 @@ class Node:
             if (response and response.status_code == 200):
                 # update our alive neighbors
                 response_json = response.json()
-                self.alive_neighbors = response_json.get("neighbors")
+                for id_, url in response_json.get("neighbors").items():
+                    self.alive_neighbors[int(id_)] = url
                 return False
             else:
                 logger.info(f'------------ in ping primary response coord crashed: {response}')
-                # self.alive_neighbors.pop(self.coordinator)
+                self.alive_neighbors.pop(self.coordinator)
                 # logger.info(f'------------ available neighbors: {self.alive_neighbors}')
                 # self.coordinator = -1
                 # self.re_election()
@@ -229,8 +226,13 @@ class Node:
         if len(self.alive_neighbors) == 1:
             self.announce()
         else:
-            for id_, url in self.alive_neighbors.items():
-                if (id_ != self.node_id):
+            # send election to those with higher ids
+            higher_ids = {id_: url for id_, url in self.alive_neighbors.items() if int(id_) > self.node_id}
+            if (len(higher_ids) == 0):
+                # if we are the one with the highest id
+                self.announce()
+            else:
+                for id_, url in higher_ids.items():
                     endpoint = f"http://{url}:{CATALOG_PORT}/election"
                     data = {"node_id": self.node_id}
                     logger.info("Sending request to coordinator at " + endpoint)
@@ -277,8 +279,7 @@ def BeginElection(node, wait=True):
                 time.sleep(3)
             else:
                 logger.info(f'============= available neighbors: {node.alive_neighbors}') 
-                # node.alive_neighbors.pop(node.coordinator)
                 node.coordinator = -1
                 node.re_election()
                 time.sleep(3)
-        
+

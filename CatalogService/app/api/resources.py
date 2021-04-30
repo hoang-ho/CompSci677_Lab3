@@ -70,9 +70,9 @@ def update_data(update_request):
     return book.title
 
 
-def wrapper_put_request(endpoint):
+def wrapper_put_request(endpoint, update_request):
     try:
-        response = requests.put(endpoint, timeout=3.05)
+        response = requests.put(endpoint, json=update_request, timeout=3.05)
         if response.status_code == 200:
             return response
         else:
@@ -118,8 +118,10 @@ def propagateUpdates(update_request):
         if (int(neighbor) != node.node_id):
             endpoint = f"http://{url}:{CATALOG_PORT}/update_database"
             logger.info("Propagate updates to endpoint %s", endpoint)
-            t = threading.Thread(target=requests.put, args=(
-                endpoint,), kwargs={"json": update_request, "timeout": 3.05})
+            t = threading.Thread(target=wrapper_put_request,
+                                 args=(endpoint, update_request))
+            # t = threading.Thread(target=requests.put, args=(
+            #     endpoint,), kwargs={"json": update_request, "timeout": 3.05})
             threads.append(t)
             t.start()
 
@@ -317,17 +319,16 @@ class Election(Resource):
         # Election.lock.release()
 
         data = request.get_json()
-        node.alive_neighbors[int(data["node_id"])] = node.neighbors[data["node_id"]]
+        node.alive_neighbors[int(data["node_id"])] = node.neighbors[int(data["node_id"])]
         logger.info(f"All our alive neighbors {node.alive_neighbors}")
         if (data["node_id"] < node.node_id):
             # Open up a thread to begin the Election
-            higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
+            higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if int(id_) > node.node_id}
             if (len(higher_ids) > 0):
-                threading.Thread(target=node.election).start()
-            else:
-                # if data['node_id'] not in node.alive_neighbors:
-                #     node_id = data['node_id']
-                #     node.alive_neighbors.add(node_id, node.neighbors[node_id])                   
+                t = threading.Thread(target=node.re_election)
+                t.start()
+                t.join()
+            else:                
                 t = threading.Thread(target=push_data)
                 t.start()
                 t.join()
@@ -387,30 +388,6 @@ class Coordinator(Resource):
 
 
 class SyncDatabase(Resource):
-    # def post(self):
-        # Sync the database
-        # json_request = request.get_json()
-        # logger.info(f"Data received {json_request}")
-        # for serverBook in json_request["Books"]:
-        #     myBook = session.query(Book).filter_by(id=serverBook["id"]).one()
-        #     if (myBook.cost != serverBook["cost"]):
-        #         myBook.cost = serverBook["cost"]
-            
-        #     if (myBook.stock != serverBook["stock"]):
-        #         myBook.stock = serverBook["stock"]
-        
-        # # initialize the election
-        # higher_ids = {id_: url for id_, url in node.alive_neighbors.items() if id_ > node.node_id}
-        # if (len(higher_ids) == 0):
-        #     # announce
-        #     # node.state = "RUNNING"
-        #     node.announce()
-        # else:
-        #     node.election()
-        # response = jsonify({'Response': 'OK'})
-        # response.status_code = 200
-        # return response
-
     def get(self):
         # node.lock.acquire()
         books = session.query(Book).all()
