@@ -34,7 +34,7 @@ if __name__ == "__main__":
         t_cache_sum += (t_end - t_start) * 1000
 
         # buy to invalidate the cache
-        response = requests.put("http://" + frontend + ":5004/buy/1")
+        response = requests.post("http://" + frontend + ":5004/buy/1")
 
         
         # t_total = t_end-t_start
