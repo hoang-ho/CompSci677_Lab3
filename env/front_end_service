@@ -1,6 +1,8 @@
 CATALOG_HOST_1=catalog_service_1
 CATALOG_HOST_2=catalog_service_2
+CATALOG_HOST_3=catalog_service_3
 CATALOG_PORT=5002
 ORDER_HOST_1=order_service_1
 ORDER_HOST_2=order_service_2
+ORDER_HOST_3=order_service_3
 ORDER_PORT=5007

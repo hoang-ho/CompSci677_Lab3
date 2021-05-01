@@ -1,6 +1,6 @@
 PROCESS_ID=123
-ALL_IDS=123,111
-ALL_HOSTNAMES=catalog_service_1,catalog_service_2
+ALL_IDS=123,111,114
+ALL_HOSTNAMES=catalog_service_1,catalog_service_2,catalog_service_3
 CATALOG_PORT=5002
 FRONTEND_HOST=front_end_service
 FRONTEND_PORT=5004

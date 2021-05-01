@@ -124,9 +124,13 @@ def push_invalidate_cache(id):
     '''
     A server-push technique to invalidate the cache in front-end before writing to database
     '''
+    t_start = time.time()
     data = {'id': id}
     url = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}/invalidate-cache"
     requests.post(url, json=data)
+    t_end = time.time()
+    t_diff = t_end - t_start
+    logger.info(f"Invalidate cache overhead {t_diff}")
 
 
 def push_data():

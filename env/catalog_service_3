@@ -1,4 +1,4 @@
-PROCESS_ID=111
+PROCESS_ID=114
 ALL_IDS=123,111,114
 ALL_HOSTNAMES=catalog_service_1,catalog_service_2,catalog_service_3
 CATALOG_PORT=5002
