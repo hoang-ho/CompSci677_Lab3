@@ -18,7 +18,7 @@ Create 7 EC2 instances using ami-00d30e14232a718f0 (this is a customized image w
 > NOTE: If you want to use your own ami, you will need to set up docker, git and security group beforehand
 
 ```
-$ aws ec2 run-instances --image-id ami-085ca2d6000e2a2e9 --instance-type t2.micro --key-name 677kp
+$ aws ec2 run-instances --image-id ami-00d30e14232a718f0 --instance-type t2.micro --key-name 677kp
 $ aws ec2 describe-instances --instance-id $INSTANCE_ID
 ```
 
